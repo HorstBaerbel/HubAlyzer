@@ -13,6 +13,22 @@ An ESP32 spectrum analyzer display for HUB75 RGB LED panels and I2S microphones 
     </span>
 </p>
 
-# Making the PCB
+## Schematics
 
-See the [KiCad](KiCad) directory for the PCB files. You upload the PCB file straight to e.g. [Aisler.net](Aisler.net) and get some pretty PCBs made.
+The circuit is using the SmartMatrix ["forum pinout"](https://github.com/pixelmatix/SmartMatrix/blob/fdb60faf8b140326c75761ac29970e48ac9cc6db/src/MatrixHardware_ESP32_V0.h#L208) without any level shifters for the LED matrix. This working fine for me for two 32x16 matrices chained together. I currently does NOT connect the E pin for 64x64 panels though. This might get fixed in a later revision.
+
+<p align="center">
+    <span>
+        <img src="schematics.png" width=80%;" title="schematics">
+    </span>
+</p>
+
+## Making the PCB
+
+See the [KiCad](KiCad) directory for the PCB files. You can upload the PCB file straight to e.g. [Aisler.net](Aisler.net) and get some pretty PCBs made.
+
+<p align="center">
+    <span>
+        <img src="pcb.jpg" width=80%;" title="pcb">
+    </span>
+</p>
