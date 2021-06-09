@@ -32,3 +32,7 @@ See the [KiCad](KiCad) directory for the PCB files. You can upload the PCB file 
         <img src="pcb.jpg" width=80%;" title="pcb">
     </span>
 </p>
+
+## Updating your network configuration
+
+Edit [HubAlyzer/network_config.h](HubAlyzer/network_config.h) and put your WiFi network and password there. Make sure NOT to commit the file and upload to GitHub when forking the repo!
