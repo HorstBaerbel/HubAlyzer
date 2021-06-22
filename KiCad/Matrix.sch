@@ -153,8 +153,6 @@ $EndComp
 Wire Wire Line
 	5050 3450 5700 3450
 Wire Wire Line
-	5050 3550 5700 3550
-Wire Wire Line
 	5050 3650 5700 3650
 Wire Wire Line
 	5050 3750 5250 3750
@@ -233,13 +231,6 @@ Wire Wire Line
 	6150 1250 6150 3350
 Wire Wire Line
 	6100 1450 6100 3350
-Wire Wire Line
-	5250 1350 5250 1550
-Wire Wire Line
-	5250 950  5250 1350
-Connection ~ 5250 1350
-Wire Wire Line
-	6300 1350 5250 1350
 Wire Wire Line
 	6200 1150 6200 2850
 Wire Wire Line
@@ -365,7 +356,7 @@ U 1 1 60B5A8FD
 P 8950 2050
 F 0 "H5" H 9050 2096 50  0000 L CNN
 F 1 "OH logo" H 9050 2005 50  0000 L CNN
-F 2 "Symbol:OSHW-Logo2_7.3x6mm_SilkScreen" H 8950 2050 50  0001 C CNN
+F 2 "Symbol:OSHW-Logo2_14.6x12mm_SilkScreen" H 8950 2050 50  0001 C CNN
 F 3 "~" H 8950 2050 50  0001 C CNN
 	1    8950 2050
 	1    0    0    -1  
@@ -376,9 +367,25 @@ U 1 1 60B5ADEA
 P 8950 2250
 F 0 "H6" H 9050 2296 50  0000 L CNN
 F 1 "KiCad logo" H 9050 2205 50  0000 L CNN
-F 2 "Symbol:KiCad-Logo_5mm_SilkScreen" H 8950 2250 50  0001 C CNN
+F 2 "Symbol:KiCad-Logo_6mm_SilkScreen" H 8950 2250 50  0001 C CNN
 F 3 "~" H 8950 2250 50  0001 C CNN
 	1    8950 2250
 	1    0    0    -1  
 $EndComp
+Wire Wire Line
+	5250 950  5250 1550
+Wire Wire Line
+	6300 1350 6050 1350
+Wire Wire Line
+	6050 1350 6050 3550
+Wire Wire Line
+	6050 3550 5700 3550
+Text Label 6250 1350 0    50   ~ 0
+E
+Wire Wire Line
+	5050 3550 5650 3550
+Wire Wire Line
+	5650 3550 5650 3050
+Wire Wire Line
+	5650 3050 5700 3050
 $EndSCHEMATC

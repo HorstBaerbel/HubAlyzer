@@ -15,7 +15,7 @@ An ESP32 spectrum analyzer display for HUB75 RGB LED panels and I2S microphones 
 
 ## Schematics
 
-The circuit is using the SmartMatrix ["forum pinout"](https://github.com/pixelmatix/SmartMatrix/blob/fdb60faf8b140326c75761ac29970e48ac9cc6db/src/MatrixHardware_ESP32_V0.h#L208) without any level shifters for the LED matrix. This working fine for me for two 32x16 matrices chained together. I currently does NOT connect the E pin for 64x64 panels though. This might get fixed in a later revision.
+The circuit is using the SmartMatrix ["forum pinout"](https://github.com/pixelmatix/SmartMatrix/blob/fdb60faf8b140326c75761ac29970e48ac9cc6db/src/MatrixHardware_ESP32_V0.h#L208) without any level shifters for the LED matrix. This working fine for me for two 32x16 matrices chained together. It includes the "E" pin for driving 64x64 matrices.
 
 <p align="center">
     <span>
