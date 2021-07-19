@@ -31,7 +31,7 @@
 static constexpr float MIC_REF_AMPL = pow(10.0F, float(MIC_SENSITIVITY) / 20.0F) * ((1 << (MIC_BITS - 1)) - 1);
 
 #define SAMPLE_RATE_HZ 48000 // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-#define SAMPLE_COUNT 512     // ~10ms sample time, must be power-of-two
+#define SAMPLE_COUNT 1024    // ~20ms sample time, must be power-of-two
 
 auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, SAMPLE_RATE_HZ>(MIC_EQUALIZER);
 
@@ -61,7 +61,7 @@ BluetoothSerial SerialBT;
 // ------------------------------------------------------------------------------------------
 
 #define GPIOPINOUT ESP32_FORUM_PINOUT
-#include <FastLED.h>
+//#include <FastLED.h>
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
 
@@ -83,61 +83,8 @@ rgb24 toRGB24(const CRGB &c)
 
 // ------------------------------------------------------------------------------------------
 
-#define FFT_SPEED_OVER_PRECISION
-#define FFT_SQRT_APPROXIMATION
-#include "arduinoFFT.h" // Arduino FFT library
-#include "approx.h"     // fast log10f approximation
-
-// A way to split FFT bins logarithmicaly by frequencies
-// Split FFT results into spectrum / frequency bins
-// See: https://dsp.stackexchange.com/questions/49436/scale-fft-frequency-range-for-a-bars-graph
-// N_fft = (F_sample * N_bars) / |(F_high - F_low)|
-#define BIN_MIN_HZ 200
-#define BIN_MAX_HZ 8000
-#define NR_OF_BINS (SAMPLE_COUNT / 2)
-#define FFT_POINTS (trunc((SAMPLE_RATE_HZ * NR_OF_BINS) / (BAR_MAX_HZ - BAR_MIN_HZ)))
-#define FFT_SPACING_HZ (trunc(SAMPLE_RATE_HZ / FFT_POINTS))
-
-// We use only the 40 lowest bins. Everything else is rather uninteresting. The lowest bin is crap / DC offset, so we don't use it.
-// Then we split the remaining bins logarithmicaly, that is, the number of bins the bars use increases logarithmicaly.
-#define BIN_LOG_START 0.0F // 10^0.0 = 1
-#define BIN_LOG_END 1.557F // 10^1.60 ~ 40
-#define BIN_LOG_RANGE (BIN_LOG_END - BIN_LOG_START)
-
-struct BarInfo
-{
-  unsigned int start; // first FFT bin for bar. filled in setupBars()
-  unsigned int end;   // last FFT bin for bar. filled in setupBars()
-  float noiseLevel;   // system-dependent noise level for bar
-};
-static const unsigned int NR_OF_BARS = 32;
-BarInfo bars[NR_OF_BARS];
-
-float weighingFactors[SAMPLE_COUNT] = {0};
-float real[SAMPLE_COUNT] = {0};
-float imag[SAMPLE_COUNT] = {0};
-auto fft = ArduinoFFT<float>(real, imag, SAMPLE_COUNT, SAMPLE_RATE_HZ, weighingFactors);
-float levels[NR_OF_BARS] = {0};
-float peaks[NR_OF_BARS] = {0};
-static constexpr float PeakDecayPerFrame = 0.002f;
-
-void setupFFTBins()
-{
-  // build bin info, spacing frequency bars even on the logarithmic x-axis
-  unsigned int currentBin = 1;
-  for (int i = 0; i < NR_OF_BARS; i++)
-  {
-    auto &bar = bars[i];
-    auto barBinCount = trunc(pow(10, BIN_LOG_START + (BIN_LOG_RANGE * (i + 1)) / NR_OF_BARS) - pow(10, BIN_LOG_START + (BIN_LOG_RANGE * i) / NR_OF_BARS));
-    bar.start = currentBin;
-    bar.end = currentBin + barBinCount;
-    bar.noiseLevel = 1.0F;
-    currentBin = bar.end + 1;
-    /*Serial.print(bar.start);
-      Serial.print(", ");
-      Serial.println(bar.end);*/
-  }
-}
+#include "audio_analysis.h"
+#include "draw.h"
 
 #ifdef ENABLE_BLUETOOTH
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
@@ -241,7 +188,7 @@ void setup()
   // initialize LED matrix
   matrix.addLayer(&backgroundLayer);
   matrix.setBrightness(255);
-  matrix.setRefreshRate(60);
+  matrix.setRefreshRate(50);
   matrix.begin();
 
   // initialize FFT
@@ -252,36 +199,6 @@ void setup()
   mic.begin();
   Serial.println("Starting sampling from mic");
   mic.startSampling();
-}
-
-void displayLine(int band, int y, rgb24 color)
-{
-  int xStart = band * (kMatrixWidth / NR_OF_BARS);
-  for (int x = 0; x < kMatrixWidth / NR_OF_BARS; x++)
-  {
-    backgroundLayer.drawPixel(xStart + x, y, color);
-  }
-}
-
-void displayBand(int band, float value, float peak)
-{
-  // color hue based on band
-  rgb24 color = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BARS - 1), 255, 255)));
-  int barHeight = (kMatrixHeight - 1) * value;
-  barHeight = barHeight < 0 ? 0 : barHeight;
-  barHeight = barHeight > (kMatrixHeight - 1) ? (kMatrixHeight - 1) : barHeight;
-  for (int y = 0; y < barHeight; y++)
-  {
-    displayLine(band, y, color);
-  }
-  if (peak > 0.0)
-  {
-    rgb24 peakColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BARS - 1), 100, 200)));
-    int peakY = (kMatrixHeight - 1) * peak;
-    peakY = peakY < 0 ? 0 : peakY;
-    peakY = peakY > (kMatrixHeight - 1) ? (kMatrixHeight - 1) : peakY;
-    displayLine(band, peakY, peakColor);
-  }
 }
 
 unsigned long frameTimes[4] = {0};
@@ -303,38 +220,12 @@ void loop()
     loopStart = micros();
     auto timeStart = loopStart;
 
-    /*for (unsigned int k = 0; k < 10; k++)
-          {
-            Serial.print(real[k], 3); Serial.print(" ");
-          }
-          Serial.println();*/
-
-    /*vMin = 1000000;
-          vMax = -vMin;
-          vAvg = 0;
-          vNan = 0;
-          for (unsigned int k = 0; k < SAMPLE_COUNT; k++)
-          {
-            if (isnan(real[k]) || isinf(real[k]))
-            {
-              real[k] = 0;
-              vNan++;
-            }
-            if (real[k] < vMin)
-            {
-              vMin = real[k];
-            }
-            if (real[k] > vMax)
-            {
-              vMax = real[k];
-            }
-            vAvg += real[k];
-          }
-          vAvg /= SAMPLE_COUNT;*/
-
     memset(imag, 0, sizeof(imag));
-    fft.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+    //fft.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+    fft.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);
     fft.compute(FFTDirection::Forward);
+    // kill the DC part in bin 0
+    //imag[0] = 0;
     fft.complexToMagnitude();
     //fft.dcRemoval();
 
@@ -372,10 +263,10 @@ void loop()
       }
       barBinCount = barBinCount == 0 ? 1 : barBinCount;
       tempLevels[i] = tempLevels[i] / barBinCount;
-      /*if (tempLevels[i] < (MIC_NOISE_DB / MIC_OVERLOAD_DB)) {
-            tempLevels[i] = 0;
-            }*/
-      levels[i] = 0.5F * levels[i] + 0.5F * tempLevels[i];
+      /*if (tempLevels[i] < bar.noiseLevel) {
+              tempLevels[i] = 0;
+          }*/
+      levels[i] = 0.25F * levels[i] + 0.75F * tempLevels[i];
       peaks[i] = levels[i] > peaks[i] ? levels[i] : (peaks[i] > 0 ? peaks[i] - PeakDecayPerFrame : 0);
       //Serial.println(levels[i], 1);
     }
@@ -383,18 +274,14 @@ void loop()
     frameTimes[2] += micros() - timeStart;
     timeStart = micros();
 
-    backgroundLayer.fillScreen(toRGB24(CRGB(0, 0, 0)));
-    for (int i = 0; i < NR_OF_BARS; i++)
-    {
-      displayBand(i, levels[i], peaks[i]);
-    }
-    backgroundLayer.swapBuffers();
+    //drawSpectrumRays(true);
+    drawSpectrumCentered();
 
-    frameTimes[3] += micros() - timeStart;
-    timeStart = micros();
-    frameCounter++;
-
-    /*if (frameCounter >= 20)
+    /*frameTimes[3] += micros() - timeStart;
+        timeStart = micros();
+        frameCounter++;
+  
+        if (frameCounter >= 20)
         {
           frameCounter *= 1000;
           Serial.print("FFT: ");
