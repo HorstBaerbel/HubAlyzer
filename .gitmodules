@@ -1,0 +1,6 @@
+[submodule "esp32-i2s-slm"]
+	path = esp32-i2s-slm
+	url = https://github.com/HorstBaerbel/esp32-i2s-slm.git
+[submodule "arduinoFFT"]
+	path = arduinoFFT
+	url = https://github.com/HorstBaerbel/arduinoFFT.git
