@@ -42,3 +42,17 @@ See the [KiCad](KiCad) directory for the PCB files. You can upload the PCB file 
 ## Updating your network configuration
 
 Edit [HubAlyzer/network_config.h](HubAlyzer/network_config.h) and put your WiFi network and password there. Make sure NOT to commit the file and upload to GitHub when forking the repo!
+
+## License
+
+If you want to build your own soft- or hardware based on this, you can. See the [MIT LICENSE](LICENSE).
+
+## TODO
+
+* Clean up code
+* Clean up esp32-i2s-slm fork
+* Merge ArduionFFT master
+* More draw function
+* Draw function switching
+* Add rotary encode handling
+* And Bluetooth MIDI and/or WiFi interface

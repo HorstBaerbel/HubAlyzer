@@ -61,7 +61,7 @@ BluetoothSerial SerialBT;
 // ------------------------------------------------------------------------------------------
 
 #define GPIOPINOUT ESP32_FORUM_PINOUT
-//#include <FastLED.h>
+#include <FastLED.h>
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
 
