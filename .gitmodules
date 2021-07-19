@@ -1,0 +1,6 @@
+[submodule "HubAlyzer/arduinoFFT"]
+	path = HubAlyzer/arduinoFFT
+	url = https://github.com/HorstBaerbel/arduinoFFT.git
+[submodule "HubAlyzer/esp32-i2s-slm"]
+	path = HubAlyzer/esp32-i2s-slm
+	url = https://github.com/HorstBaerbel/esp32-i2s-slm.git
