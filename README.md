@@ -51,8 +51,8 @@ If you want to build your own soft- or hardware based on this, you can. See the 
 
 * Clean up code
 * Clean up esp32-i2s-slm fork
-* Merge ArduionFFT master
-* More draw function
+* Merge ArduinoFFT master
+* More draw functions
 * Draw function switching
-* Add rotary encode handling
+* Add rotary encoder handling
 * And Bluetooth MIDI and/or WiFi interface
