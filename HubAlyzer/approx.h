@@ -1,9 +1,12 @@
 #pragma once
 
+#include <utility>
+#include <cmath>
+
 // == 1 / log2(10)
 #define ONE_OVER_LOG2_10 0.3010299956639812f
 
-// compute log2(x) by reducing x to [0.75, 1.5), then divide by log2(10)
+// compute log10(x) by reducing x to [0.75, 1.5), then divide by log2(10)
 // See: https://tech.ebayinc.com/engineering/fast-approximate-logarithms-part-iii-the-formulas/
 // This version uses only multiplies
 float log10f_fast(float x)

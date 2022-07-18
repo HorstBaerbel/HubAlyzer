@@ -43,6 +43,10 @@ See the [KiCad](KiCad) directory for the PCB files. You can upload the PCB file 
 
 Edit [HubAlyzer/network_config.h](HubAlyzer/network_config.h) and put your WiFi network and password there. Make sure NOT to commit the file and upload to GitHub when forking the repo!
 
+## Problems flashing the Arduino code
+
+If the Arduino IDE fails to connect to the board / upload the code, see [this](https://github.com/espressif/arduino-esp32/issues/2516).
+
 ## License
 
 If you want to build your own soft- or hardware based on this, you can. See the [MIT LICENSE](LICENSE).

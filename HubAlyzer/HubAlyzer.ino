@@ -16,24 +16,40 @@
 
 #include "esp32-i2s-slm/filters.h"
 #include "esp32-i2s-slm/i2s_mic.h"
+#include "approx.h" // fast log10f and sincosf approximation
+#include <cmath>
 
 // NOTE: Some microphones require at least a DC-Blocker filter
 #define MIC_EQUALIZER INMP441 // See below for defined IIR filters or set to 'None' to disable
-#define MIC_OFFSET_DB 3.0103F // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
+static constexpr float MIC_OFFSET_DB = 3.0103f; // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
 // Customize these values from microphone datasheet
-#define MIC_SENSITIVITY -26.0F // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
-#define MIC_REF_DB 94.0F       // Value at which point sensitivity is specified in datasheet (dB)
-#define MIC_OVERLOAD_DB 120.0F // dB - Acoustic overload point / Maximum Acoustic Input
-#define MIC_NOISE_DB 33.0F     // dB - Noise floor
-#define MIC_BITS 24            // valid number of bits in I2S data
+static constexpr int MIC_SENSITIVITY = -26.0f; // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
+static constexpr int MIC_REF_DB = 94.0f;       // Value at which point sensitivity is specified in datasheet (dB)
+static constexpr int MIC_OVERLOAD_DB = 120.0f; // dB - Acoustic overload point / Maximum Acoustic Input
+static constexpr int MIC_NOISE_DB = 33.0f;     // dB - Noise floor
+static constexpr unsigned MIC_BITS = 24;         // valid number of bits in I2S data
 
-// Calculate reference amplitude value at compile time
-static constexpr float MIC_REF_AMPL = pow(10.0F, float(MIC_SENSITIVITY) / 20.0F) * ((1 << (MIC_BITS - 1)) - 1);
+// Microphone reference amplitude value 
+constexpr float MIC_REF_AMPL = powf(10.0f, float(MIC_SENSITIVITY) / 20.0f) * ((1 << (MIC_BITS - 1)) - 1);
 
-#define SAMPLE_RATE_HZ 48000 // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-#define SAMPLE_COUNT 1024    // ~20ms sample time, must be power-of-two
+// Convert microphone amplitude to dB values
+float MicAmplitudeToDb(float v)
+{
+   return MIC_OFFSET_DB + MIC_REF_DB + 20.0f * log10f_fast(v / MIC_REF_AMPL);
+}
+
+static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
+static constexpr unsigned SAMPLE_COUNT = 1024;    // ~20ms sample time, must be power-of-two
 
 auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, SAMPLE_RATE_HZ>(MIC_EQUALIZER);
+
+// ------------------------------------------------------------------------------------------
+
+#include "spectrum.h"
+
+static constexpr unsigned NR_OF_BANDS = 32;
+
+auto spectrum = Spectrum<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(MicAmplitudeToDb);
 
 // ------------------------------------------------------------------------------------------
 
@@ -60,31 +76,29 @@ BluetoothSerial SerialBT;
 
 // ------------------------------------------------------------------------------------------
 
-#define GPIOPINOUT ESP32_FORUM_PINOUT
 #include <FastLED.h>
+#define GPIOPINOUT ESP32_FORUM_PINOUT
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
 
 #define COLOR_DEPTH 24                                       // known working: 24, 48 - If the sketch uses type `rgb24` directly, COLOR_DEPTH must be 24
-const uint8_t kMatrixWidth = 32;                             // known working: 32, 64, 96, 128
-const uint8_t kMatrixHeight = 32;                            // known working: 16, 32, 48, 64
-const uint8_t kRefreshDepth = 24;                            // known working: 24, 36, 48
-const uint8_t kDmaBufferRows = 4;                            // known working: 2-4, use 2 to save memory, more to keep from dropping frames and automatically lowering refresh rate
-const uint8_t kPanelType = SMARTMATRIX_HUB75_16ROW_MOD8SCAN; // use SMARTMATRIX_HUB75_16ROW_MOD8SCAN for common 16x32 panels
-const uint8_t kMatrixOptions = (SM_HUB75_OPTIONS_NONE);      // see http://docs.pixelmatix.com/SmartMatrix for options
-const uint8_t kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
+static constexpr unsigned kMatrixWidth = 32;                             // known working: 32, 64, 96, 128
+static constexpr unsigned kMatrixHeight = 32;                            // known working: 16, 32, 48, 64
+static constexpr unsigned kRefreshDepth = 24;                            // known working: 24, 36, 48
+static constexpr unsigned kDmaBufferRows = 4;                            // known working: 2-4, use 2 to save memory, more to keep from dropping frames and automatically lowering refresh rate
+static constexpr unsigned kPanelType = SMARTMATRIX_HUB75_16ROW_MOD8SCAN; // use SMARTMATRIX_HUB75_16ROW_MOD8SCAN for common 16x32 panels
+static constexpr unsigned kMatrixOptions = (SM_HUB75_OPTIONS_NONE);      // see http://docs.pixelmatix.com/SmartMatrix for options
+static constexpr unsigned kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
 SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
 
-rgb24 toRGB24(const CRGB &c)
-{
-  return rgb24{c.r, c.g, c.b};
-}
-
 // ------------------------------------------------------------------------------------------
 
-#include "audio_analysis.h"
 #include "draw.h"
+
+auto draw = Draw<kMatrixWidth, kMatrixHeight, kBackgroundLayerOptions>(backgroundLayer);
+
+// ------------------------------------------------------------------------------------------
 
 #ifdef ENABLE_BLUETOOTH
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
@@ -190,12 +204,7 @@ void setup()
   matrix.setBrightness(255);
   matrix.setRefreshRate(50);
   matrix.begin();
-
-  // initialize FFT
-  setupFFTBins();
-  //Serial.print("Size of uint_fast16_t is "); Serial.println(sizeof(uint_fast16_t));
-  //Serial.print("Size of uint_fast8_t is "); Serial.println(sizeof(uint_fast8_t));
-
+  // initialize microphone
   mic.begin();
   Serial.println("Starting sampling from mic");
   mic.startSampling();
@@ -214,68 +223,12 @@ unsigned long loopTime = 0;
 void loop()
 {
   Serial.println("Starting loop");
-  while (xQueueReceive(mic.sampleQueue(), &real, portMAX_DELAY))
+  while (xQueueReceive(mic.sampleQueue(), spectrum.input(), portMAX_DELAY))
   {
-    loopTime += micros() - loopStart;
-    loopStart = micros();
-    auto timeStart = loopStart;
+    spectrum.update();
 
-    memset(imag, 0, sizeof(imag));
-    //fft.windowing(FFTWindow::Hamming, FFTDirection::Forward);
-    fft.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);
-    fft.compute(FFTDirection::Forward);
-    // kill the DC part in bin 0
-    //imag[0] = 0;
-    fft.complexToMagnitude();
-    //fft.dcRemoval();
-
-    frameTimes[0] += micros() - timeStart;
-    timeStart = micros();
-
-    // Calculate dB values relative to MIC_REF_AMPL and adjust for microphone reference
-    // this should give values between ~[MIC_NOISE_DB, MIC_OVERLOAD_DB]
-    for (unsigned int i = 0; i < SAMPLE_COUNT; i++)
-    {
-      real[i] = MIC_OFFSET_DB + MIC_REF_DB + 20.0F * log10f_fast(real[i] / MIC_REF_AMPL);
-    }
-
-    frameTimes[1] += micros() - timeStart;
-    timeStart = micros();
-
-    float tempLevels[NR_OF_BARS];
-    for (int i = 0; i < NR_OF_BARS; i++)
-    {
-      auto const &bar = bars[i]; // the bar we've currently processing
-      float barBinCount = 0;     // number of valid bins found
-      tempLevels[i] = 0;         // accumulated levels
-      for (unsigned int vi = bar.start; vi <= bar.end; vi++)
-      {
-        // accumulate values
-        float value = real[vi];
-        // normalize and clamp
-        if (value >= 2.0F * MIC_NOISE_DB)
-        {
-          value = (value - 2.0F * MIC_NOISE_DB) * (1.0F / MIC_OVERLOAD_DB);
-          value = value < 0 ? 0 : value;
-          tempLevels[i] += value;
-          barBinCount++;
-        }
-      }
-      barBinCount = barBinCount == 0 ? 1 : barBinCount;
-      tempLevels[i] = tempLevels[i] / barBinCount;
-      /*if (tempLevels[i] < bar.noiseLevel) {
-              tempLevels[i] = 0;
-          }*/
-      levels[i] = 0.25F * levels[i] + 0.75F * tempLevels[i];
-      peaks[i] = levels[i] > peaks[i] ? levels[i] : (peaks[i] > 0 ? peaks[i] - PeakDecayPerFrame : 0);
-      //Serial.println(levels[i], 1);
-    }
-
-    frameTimes[2] += micros() - timeStart;
-    timeStart = micros();
-
-    //drawSpectrumRays(true);
-    drawSpectrumCentered();
+    draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
+    //draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
 
     /*frameTimes[3] += micros() - timeStart;
         timeStart = micros();
