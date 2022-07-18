@@ -83,7 +83,7 @@ public:
     i2s_config.sample_rate = SAMPLE_RATE_HZ;
     i2s_config.bits_per_sample = i2s_bits_per_sample_t(SAMPLE_BITS);
     i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;
-    i2s_config.communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB);
+    i2s_config.communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S);
     i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
     i2s_config.dma_buf_count = 2;
     i2s_config.dma_buf_len = SAMPLE_COUNT;
