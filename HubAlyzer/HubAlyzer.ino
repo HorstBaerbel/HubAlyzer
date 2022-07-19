@@ -39,7 +39,7 @@ float MicAmplitudeToDb(float v)
 }
 
 static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-static constexpr unsigned SAMPLE_COUNT = 1024;    // ~20ms sample time, must be power-of-two
+static constexpr unsigned SAMPLE_COUNT = 512;    // ~10ms sample time, must be power-of-two
 
 auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, SAMPLE_RATE_HZ>(MIC_EQUALIZER);
 
