@@ -46,22 +46,30 @@ private:
   template<int NR_OF_BANDS>
   void displayBand(int band, float value, float peak, int y0, float scaleFactor, bool invert)
   {
+    int x = band * (Width / NR_OF_BANDS);
     // color hue based on band
     rgb24 color = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 255, 255)));
-    int barHeight = MaxY * value * scaleFactor;
+    // draw bar until last pixel
+    float barHeightf = MaxY * value * scaleFactor;
+    int barHeight = trunc(barHeightf);
     barHeight = barHeight < 0 ? 0 : barHeight;
     barHeight = barHeight > MaxY ? MaxY : barHeight;
-    for (int y = 0; y < barHeight; y++)
+    for (int y = 0; y < barHeight - 1; y++)
     {
-        displayLine<NR_OF_BANDS>(band, invert ? y0 - y : y0 + y, color);
+        m_layer.drawPixel(x, invert ? y0 - y : y0 + y, color);
     }
+    // draw final pixel
+    float barRest = barHeightf - barHeight;
+    rgb24 restColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 255, 255 * barRest)));
+    m_layer.drawPixel(x, invert ? y0 - (barHeight - 1) : y0 + (barHeight - 1), restColor);
+    // draw peak
     if (peak > (0.5f / Height))
     {
       rgb24 peakColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 100, 150)));
       int peakY = MaxY * peak * scaleFactor;
       peakY = peakY < 0 ? 0 : peakY;
       peakY = peakY > MaxY ? MaxY : peakY;
-      displayLine<NR_OF_BANDS>(band, invert ? y0 - peakY : y0 + peakY, peakColor);
+      m_layer.drawPixel(x, invert ? y0 - peakY : y0 + peakY, peakColor);
     }
   }
 
