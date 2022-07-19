@@ -202,7 +202,7 @@ void setup()
   // initialize LED matrix
   matrix.addLayer(&backgroundLayer);
   matrix.setBrightness(255);
-  matrix.setRefreshRate(50);
+  matrix.setRefreshRate(60);
   matrix.begin();
   // initialize microphone
   mic.begin();
@@ -227,8 +227,8 @@ void loop()
   {
     spectrum.update();
 
-    draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
-    //draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
+    //draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
+    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
 
     /*frameTimes[3] += micros() - timeStart;
         timeStart = micros();

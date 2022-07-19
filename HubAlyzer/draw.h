@@ -44,11 +44,11 @@ private:
   }
 
   template<int NR_OF_BANDS>
-  void displayBand(int band, float value, float peak, int y0, bool invert)
+  void displayBand(int band, float value, float peak, int y0, float scaleFactor, bool invert)
   {
     // color hue based on band
     rgb24 color = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 255, 255)));
-    int barHeight = MaxY * value;
+    int barHeight = MaxY * value * scaleFactor;
     barHeight = barHeight < 0 ? 0 : barHeight;
     barHeight = barHeight > MaxY ? MaxY : barHeight;
     for (int y = 0; y < barHeight; y++)
@@ -57,8 +57,8 @@ private:
     }
     if (peak > (0.5f / Height))
     {
-      rgb24 peakColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 100, 200)));
-      int peakY = MaxY * peak;
+      rgb24 peakColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 100, 150)));
+      int peakY = MaxY * peak * scaleFactor;
       peakY = peakY < 0 ? 0 : peakY;
       peakY = peakY > MaxY ? MaxY : peakY;
       displayLine<NR_OF_BANDS>(band, invert ? y0 - peakY : y0 + peakY, peakColor);
@@ -76,8 +76,8 @@ public:
       m_layer.fillScreen(toRGB24(CRGB(0, 0, 0)));
       for (int i = 0; i < NR_OF_BANDS; i++)
       {
-        displayBand<NR_OF_BANDS>(i, levels[i], peaks[i], Height / 2, true);
-        displayBand<NR_OF_BANDS>(i, levels[i], peaks[i], Height / 2, false);
+        displayBand<NR_OF_BANDS>(i, levels[i], peaks[i], Height / 2, 0.5f, true);
+        displayBand<NR_OF_BANDS>(i, levels[i], peaks[i], Height / 2, 0.5f, false);
       }
       m_layer.swapBuffers();
   }
@@ -104,7 +104,7 @@ public:
           }
           if (peakRadius > 0.5f)
           {
-            rgb24 color = toRGB24(CRGB(CHSV((i * 255) / (NR_OF_BANDS - 1), 100, 200)));
+            rgb24 color = toRGB24(CRGB(CHSV((i * 255) / (NR_OF_BANDS - 1), 100, 150)));
             auto p1 = polarToCartesian(peakRadius, angle0);
             auto p2 = polarToCartesian(peakRadius, angle1);
             m_layer.drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
