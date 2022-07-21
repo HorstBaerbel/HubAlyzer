@@ -20,36 +20,36 @@
 #include <cmath>
 
 // NOTE: Some microphones require at least a DC-Blocker filter
-#define MIC_EQUALIZER INMP441 // See below for defined IIR filters or set to 'None' to disable
+#define MIC_EQUALIZER INMP441                   // See below for defined IIR filters or set to 'None' to disable
 static constexpr float MIC_OFFSET_DB = 3.0103f; // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
 // Customize these values from microphone datasheet
 static constexpr int MIC_SENSITIVITY = -26.0f; // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
 static constexpr int MIC_REF_DB = 94.0f;       // Value at which point sensitivity is specified in datasheet (dB)
 static constexpr int MIC_OVERLOAD_DB = 120.0f; // dB - Acoustic overload point / Maximum Acoustic Input
 static constexpr int MIC_NOISE_DB = 33.0f;     // dB - Noise floor
-static constexpr unsigned MIC_BITS = 24;         // valid number of bits in I2S data
+static constexpr unsigned MIC_BITS = 24;       // valid number of bits in I2S data
 
-// Microphone reference amplitude value 
-constexpr float MIC_REF_AMPL = powf(10.0f, float(MIC_SENSITIVITY) / 20.0f) * ((1 << (MIC_BITS - 1)) - 1);
+constexpr float MIC_REF_AMPL = powf(10.0f, float(MIC_SENSITIVITY) / 20.0f) * ((1 << (MIC_BITS - 1)) - 1); // Microphone reference amplitude value
 
 // Convert microphone amplitude to dB values
 float MicAmplitudeToDb(float v)
 {
-   return MIC_OFFSET_DB + MIC_REF_DB + 20.0f * log10f_fast(v / MIC_REF_AMPL);
+  return MIC_OFFSET_DB + MIC_REF_DB + 20.0f * log10f_fast(v / MIC_REF_AMPL);
 }
 
 static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-static constexpr unsigned SAMPLE_COUNT = 512;    // ~10ms sample time, must be power-of-two
+static constexpr unsigned SAMPLE_COUNT = 512;     // ~10ms sample time, must be power-of-two
+float samples[SAMPLE_COUNT];                      // Raw microphone sample storage
 
 auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, SAMPLE_RATE_HZ>(MIC_EQUALIZER);
 
 // ------------------------------------------------------------------------------------------
 
-#include "spectrum.h"
+#include "analyzer.h"
 
 static constexpr unsigned NR_OF_BANDS = 32;
 
-auto spectrum = Spectrum<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(MicAmplitudeToDb);
+auto analyzer = Analyzer<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(&samples, MicAmplitudeToDb);
 
 // ------------------------------------------------------------------------------------------
 
@@ -81,7 +81,7 @@ BluetoothSerial SerialBT;
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
 
-#define COLOR_DEPTH 24                                       // known working: 24, 48 - If the sketch uses type `rgb24` directly, COLOR_DEPTH must be 24
+#define COLOR_DEPTH 24                                                   // known working: 24, 48 - If the sketch uses type `rgb24` directly, COLOR_DEPTH must be 24
 static constexpr unsigned kMatrixWidth = 32;                             // known working: 32, 64, 96, 128
 static constexpr unsigned kMatrixHeight = 32;                            // known working: 16, 32, 48, 64
 static constexpr unsigned kRefreshDepth = 24;                            // known working: 24, 36, 48
@@ -147,8 +147,7 @@ void setup()
                        else // U_SPIFFS
                          type = "filesystem";
                        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-                       Serial.println("Start updating " + type);
-                     })
+                       Serial.println("Start updating " + type); })
       .onEnd([]()
              { Serial.println("\nEnd"); })
       .onProgress([](unsigned int progress, unsigned int total)
@@ -165,8 +164,7 @@ void setup()
                  else if (error == OTA_RECEIVE_ERROR)
                    Serial.println("Receive Failed");
                  else if (error == OTA_END_ERROR)
-                   Serial.println("End Failed");
-               });
+                   Serial.println("End Failed"); });
   ArduinoOTA.begin();
   Serial.print("Hostname: ");
   Serial.println(hostName);
@@ -177,7 +175,7 @@ void setup()
 #endif
 
 #ifdef ENABLE_BLUETOOTH
-  //SerialBT.register_callback(bluetoothCallback);
+  // SerialBT.register_callback(bluetoothCallback);
   if (!SerialBT.begin(hostName))
   {
     Serial.println("An error occurred initializing Bluetooth!");
@@ -223,17 +221,17 @@ unsigned long loopTime = 0;
 void loop()
 {
   Serial.println("Starting loop");
-  while (xQueueReceive(mic.sampleQueue(), spectrum.input(), portMAX_DELAY))
+  while (xQueueReceive(mic.sampleQueue(), &samples, portMAX_DELAY))
   {
-    spectrum.update();
+    analyzer.update();
 
-    //draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
-    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
+    // draw.spectrumRays<NR_OF_BANDS>(analyzer.levels(), analyzer.peaks(), true);
+    draw.spectrumCentered<NR_OF_BANDS>(analyzer.levels(), analyzer.peaks());
 
     /*frameTimes[3] += micros() - timeStart;
         timeStart = micros();
         frameCounter++;
-  
+
         if (frameCounter >= 20)
         {
           frameCounter *= 1000;

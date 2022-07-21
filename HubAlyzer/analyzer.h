@@ -8,14 +8,14 @@
 #include <cmath>
 #include <functional>
 
-// Spectrum analyzer
+// Spectrum analyzer and beat detection
 // SAMPLE_COUNT = Number of audio samples to use for FFT. This will allocate twice the ammount of 4-byte float values
 // AUDIO_NOISE_DB = Audio noise floor in dB
 // AUDIO_MAX_DB = Max. audio signal in dB
 // NR_OF_BANDS = Number of spectrum bands to generate
 // SAMPLE_RATE = Audio sample rate in Hz
 template <unsigned SAMPLE_COUNT, unsigned int AUDIO_NOISE_DB = 33, unsigned int AUDIO_MAX_DB = 120, unsigned int NR_OF_BANDS = 32, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
-class Spectrum
+class Analyzer
 {
 public:
   // Split FFT results into spectrum / frequency bins logarithmicaly
@@ -36,8 +36,8 @@ public:
   static constexpr float AgcKeepLevel = 10.0f;                                        // The maximum ammount the "automatic gain control" mechanism will remove from the signal
 
   /// @brief amplitudeToDbFunc Function that converts audio amplitude values to dB values. This is system dependent and thus has to come from outside
-  Spectrum(std::function<float(float)> amplitudeToDb)
-      : m_amplitudeToDb(amplitudeToDb)
+  Analyzer(float (*samples)[SAMPLE_COUNT], std::function<float(float)> amplitudeToDb)
+      : m_real(reinterpret_cast<float *>(samples)), m_fft(ArduinoFFT<float>(m_real, m_imag, SAMPLE_COUNT, SAMPLE_RATE_HZ, m_weighingFactors)), m_amplitudeToDb(amplitudeToDb)
   {
     // Serial.print("Log end: "); Serial.println(BIN_LOG_END);
     //  build bin info, spacing frequency bars evenly on the logarithmic x-axis
@@ -55,12 +55,6 @@ public:
       // Serial.print(", ");
       // Serial.println(bar.end);
     }
-  }
-
-  /// @brief Get data storage for input audio values. Write SAMPLE_COUNT audio samples to this
-  float *input()
-  {
-    return m_real;
   }
 
   /// @brief Get normalized level data. Read NR_OF_BANDS levels from this
@@ -119,10 +113,11 @@ public:
       tempMin = tempLevels[i] < tempMin ? tempLevels[i] : tempMin;
     }
     tempAvg /= NR_OF_BANDS;
-    // calculate new running average
+    // calculate new running average. we use an average of the minimum and average here,
+    // as both alone won't give goode results
     auto levelFuzz = 0.5f * tempAvg + 0.5f * tempMin;
     m_levelsAvg = AgcSpeedFactor * levelFuzz + (1.0f - AgcSpeedFactor) * m_levelsAvg;
-    // calculate amount of AGC 
+    // calculate amount of AGC
     const auto agcLevel = m_levelsAvg;
     const auto agcFactor = 0.033333f * m_levelsAvg + 1.0f;
     // apply running average and calculate current levels
@@ -152,9 +147,9 @@ private:
 
   std::function<float(float)> m_amplitudeToDb{};
   float m_weighingFactors[SAMPLE_COUNT] = {0};
-  float m_real[SAMPLE_COUNT] = {0};
+  float *m_real = nullptr;
   float m_imag[SAMPLE_COUNT] = {0};
-  ArduinoFFT<float> m_fft = ArduinoFFT<float>(m_real, m_imag, SAMPLE_COUNT, SAMPLE_RATE_HZ, m_weighingFactors);
+  ArduinoFFT<float> m_fft;
   float m_levels[NR_OF_BANDS] = {0};
   float m_peaks[NR_OF_BANDS] = {0};
   float m_levelsAvg = 0.0f; // running average level
