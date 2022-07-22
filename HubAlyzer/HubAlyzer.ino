@@ -19,6 +19,10 @@
 #include "approx.h" // fast log10f and sincosf approximation
 #include <cmath>
 
+static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
+static constexpr unsigned SAMPLE_COUNT = 512;     // ~10ms sample time, must be power-of-two
+float samples[SAMPLE_COUNT];                      // Raw microphone sample storage
+
 // NOTE: Some microphones require at least a DC-Blocker filter
 #define MIC_EQUALIZER INMP441                   // See below for defined IIR filters or set to 'None' to disable
 static constexpr float MIC_OFFSET_DB = 3.0103f; // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
@@ -37,19 +41,17 @@ float MicAmplitudeToDb(float v)
   return MIC_OFFSET_DB + MIC_REF_DB + 20.0f * log10f_fast(v / MIC_REF_AMPL);
 }
 
-static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-static constexpr unsigned SAMPLE_COUNT = 512;     // ~10ms sample time, must be power-of-two
-float samples[SAMPLE_COUNT];                      // Raw microphone sample storage
-
 auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, SAMPLE_RATE_HZ>(MIC_EQUALIZER);
 
 // ------------------------------------------------------------------------------------------
 
-#include "analyzer.h"
+#include "fft.h"
+#include "spectrum.h"
 
 static constexpr unsigned NR_OF_BANDS = 32;
 
-auto analyzer = Analyzer<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(&samples, MicAmplitudeToDb);
+auto fft = FFT<SAMPLE_COUNT, SAMPLE_RATE_HZ>(&samples);
+auto spectrum = Spectrum<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(&samples, MicAmplitudeToDb);
 
 // ------------------------------------------------------------------------------------------
 
@@ -208,50 +210,21 @@ void setup()
   mic.startSampling();
 }
 
-unsigned long frameTimes[4] = {0};
-unsigned long frameCounter = 0;
-unsigned long loopStart = 0;
-unsigned long loopTime = 0;
-
-/*float vMin;
-  float vMax;
-  double vAvg;
-  long vNan;*/
-
 void loop()
 {
   Serial.println("Starting loop");
+  // Get samples from other ESP32 core that receives the I2S audio data
   while (xQueueReceive(mic.sampleQueue(), &samples, portMAX_DELAY))
   {
-    analyzer.update();
-
-    // draw.spectrumRays<NR_OF_BANDS>(analyzer.levels(), analyzer.peaks(), true);
-    draw.spectrumCentered<NR_OF_BANDS>(analyzer.levels(), analyzer.peaks());
-
-    /*frameTimes[3] += micros() - timeStart;
-        timeStart = micros();
-        frameCounter++;
-
-        if (frameCounter >= 20)
-        {
-          frameCounter *= 1000;
-          Serial.print("FFT: ");
-          Serial.print((float)frameTimes[0] / float(frameCounter), 2); Serial.print(" ms, dB calculation: ");
-          Serial.print((float)frameTimes[1] / float(frameCounter), 2); Serial.print(" ms, Levels: ");
-          Serial.print((float)frameTimes[2] / float(frameCounter), 2); Serial.print(" ms, Display: ");
-          Serial.print((float)frameTimes[3] / float(frameCounter), 2); Serial.print(" ms, Loop called every: ");
-          Serial.print((float)loopTime / float(frameCounter), 2); Serial.println(" ms");
-          frameCounter = 0;
-          frameTimes[0] = 0;
-          frameTimes[1] = 0;
-          frameTimes[2] = 0;
-          frameTimes[3] = 0;
-          loopTime = 0;
-          //Serial.print("Min: "); Serial.print(vMin, 3);
-          //Serial.print(", Max: "); Serial.print(vMax, 3);
-          //Serial.print(", Avg: "); Serial.print(vAvg, 3);
-          //Serial.print(", NAN or INF: "); Serial.println(vNan);
-        }*/
+    // apply A-Weighting filter for perceptive loudness. See: https://www.noisemeters.com/help/faq/frequency-weighting/
+    A_weighting.applyFilters(samples, samples, SAMPLE_COUNT);
+    A_weighting.applyGain(samples, samples, SAMPLE_COUNT);
+    // apply FFT to samples
+    fft.update();
+    spectrum.update();
+    // draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
+    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
+    // Enable over-the-air updates
 #ifdef ENABLE_OTA
     EVERY_N_MILLISECONDS(1000)
     {

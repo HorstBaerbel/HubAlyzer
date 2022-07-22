@@ -1,21 +1,16 @@
 #pragma once
 
-#define FFT_SPEED_OVER_PRECISION
-#define FFT_SQRT_APPROXIMATION
-#include "arduinoFFT.h" // Arduino FFT library
-#include "esp32-i2s-slm/filters.h"
-
 #include <cmath>
 #include <functional>
 
-// Spectrum analyzer and beat detection
+// Spectrum analyzer
 // SAMPLE_COUNT = Number of audio samples to use for FFT. This will allocate twice the ammount of 4-byte float values
 // AUDIO_NOISE_DB = Audio noise floor in dB
 // AUDIO_MAX_DB = Max. audio signal in dB
 // NR_OF_BANDS = Number of spectrum bands to generate
 // SAMPLE_RATE = Audio sample rate in Hz
 template <unsigned SAMPLE_COUNT, unsigned int AUDIO_NOISE_DB = 33, unsigned int AUDIO_MAX_DB = 120, unsigned int NR_OF_BANDS = 32, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
-class Analyzer
+class Spectrum
 {
 public:
   // Split FFT results into spectrum / frequency bins logarithmicaly
@@ -35,9 +30,11 @@ public:
   static constexpr float AgcSpeedFactor = 0.01f;                                      // The speed of the "Automatic Gain Control" mechanism [0,1]
   static constexpr float AgcKeepLevel = 10.0f;                                        // The maximum ammount the "automatic gain control" mechanism will remove from the signal
 
-  /// @brief amplitudeToDbFunc Function that converts audio amplitude values to dB values. This is system dependent and thus has to come from outside
-  Analyzer(float (*samples)[SAMPLE_COUNT], std::function<float(float)> amplitudeToDb)
-      : m_real(reinterpret_cast<float *>(samples)), m_fft(ArduinoFFT<float>(m_real, m_imag, SAMPLE_COUNT, SAMPLE_RATE_HZ, m_weighingFactors)), m_amplitudeToDb(amplitudeToDb)
+  /// @brief Construct a new spectrum analyzer
+  /// @p amplitudes Amplitude values for individual frequency bands from the FFT
+  /// @p amplitudeToDbFunc Function that converts audio amplitude values to dB values. This is audio input system dependent and thus has to come from outside
+  Spectrum(float (*amplitudes)[SAMPLE_COUNT], std::function<float(float)> amplitudeToDb)
+      : m_amplitudes(reinterpret_cast<float *>(amplitudes)), m_amplitudeToDb(amplitudeToDb)
   {
     // Serial.print("Log end: "); Serial.println(BIN_LOG_END);
     //  build bin info, spacing frequency bars evenly on the logarithmic x-axis
@@ -72,19 +69,6 @@ public:
   /// @brief Call to update spectrum data
   void update()
   {
-    // apply A-Weighting filter for perceptive loudness. See: https://www.noisemeters.com/help/faq/frequency-weighting/
-    A_weighting.applyFilters(m_real, m_real, SAMPLE_COUNT);
-    A_weighting.applyGain(m_real, m_real, SAMPLE_COUNT);
-    // apply FFT
-    memset(m_imag, 0, sizeof(m_imag));
-    // m_fft.windowing(FFTWindow::Hamming, FFTDirection::Forward);
-    m_fft.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);
-    m_fft.compute(FFTDirection::Forward);
-    // kill the DC part in bin 0
-    // m_real[0] = 0;
-    // m_imag[0] = 0;
-    // m_fft.dcRemoval();
-    m_fft.complexToMagnitude();
     // calculate band levels
     float tempLevels[NR_OF_BANDS];
     for (int i = 0; i < NR_OF_BANDS; i++)
@@ -93,8 +77,8 @@ public:
       tempLevels[i] = 0;             // accumulated levels
       for (unsigned int vi = band.start; vi <= band.end; vi++)
       {
-        // Calculate dB values from amplitudes. This should give values between ~[AUDIO_NOISE_DB, AUDIO_OVERLOAD_DB]
-        auto value = m_amplitudeToDb(m_real[vi]);
+        // Calculate dB values from amplitudes. This should give values between ~[AUDIO_NOISE_DB, AUDIO_MAX_DB]
+        auto value = m_amplitudeToDb(m_amplitudes[vi]);
         // remove noise floor and clamp to 0
         value = value > AUDIO_NOISE_DB ? value - AUDIO_NOISE_DB : 0;
         value = value < 0 ? 0 : value;
@@ -146,10 +130,7 @@ private:
   BandInfo m_bands[NR_OF_BANDS];
 
   std::function<float(float)> m_amplitudeToDb{};
-  float m_weighingFactors[SAMPLE_COUNT] = {0};
-  float *m_real = nullptr;
-  float m_imag[SAMPLE_COUNT] = {0};
-  ArduinoFFT<float> m_fft;
+  float *m_amplitudes = nullptr;
   float m_levels[NR_OF_BANDS] = {0};
   float m_peaks[NR_OF_BANDS] = {0};
   float m_levelsAvg = 0.0f; // running average level
