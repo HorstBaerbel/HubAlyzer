@@ -46,18 +46,24 @@ auto mic = Microphone_I2S<SAMPLE_COUNT, 33, 32, 34, I2S_NUM_0, MIC_BITS, false, 
 // ------------------------------------------------------------------------------------------
 
 #include "fft.h"
+#include "normalization.h"
 #include "spectrum.h"
+#include "beat_detection.h"
 
 static constexpr unsigned NR_OF_BANDS = 32;
+static constexpr unsigned MAX_ANALYSIS_FREQUENCY_HZ = 4000;
 
 auto fft = FFT<SAMPLE_COUNT, SAMPLE_RATE_HZ>(&samples);
-auto spectrum = Spectrum<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, NR_OF_BANDS>(&samples, MicAmplitudeToDb);
+auto normalization = Normalization<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>(MicAmplitudeToDb);
+auto spectrum = Spectrum<SAMPLE_COUNT, NR_OF_BANDS, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>();
+auto beats = BeatDetection<SAMPLE_COUNT, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>();
 
 // ------------------------------------------------------------------------------------------
 
-#define ENABLE_OTA
-#ifdef ENABLE_OTA
 #include <WiFi.h>
+
+//#define ENABLE_OTA
+#ifdef ENABLE_OTA
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
@@ -173,6 +179,8 @@ void setup()
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 #else
+  // Turn Wifi off
+  Serial.println("Turning WiFi off");
   WiFi.mode(WIFI_OFF);
 #endif
 
@@ -210,6 +218,11 @@ void setup()
   mic.startSampling();
 }
 
+//#define PRINT_LOOP_TIME
+#ifdef PRINT_LOOP_TIME
+long lastLoopTime = 0;
+#endif
+
 void loop()
 {
   Serial.println("Starting loop");
@@ -219,17 +232,27 @@ void loop()
     // apply A-Weighting filter for perceptive loudness. See: https://www.noisemeters.com/help/faq/frequency-weighting/
     A_weighting.applyFilters(samples, samples, SAMPLE_COUNT);
     A_weighting.applyGain(samples, samples, SAMPLE_COUNT);
-    // apply FFT to samples
-    fft.update();
-    spectrum.update();
-    // draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
-    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks());
+    // apply FFT to samples and return amplitudes
+    auto amplitudes = fft.calculate();
+    auto magnitudes = normalization.apply(amplitudes);
+    spectrum.update(magnitudes);
+    beats.update(magnitudes);
+    bool isBeat = beats.timeSinceLastBeatMs() < 500;
+    // Serial.println(beats.timeSinceLastBeatMs());
+    //  draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
+    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), isBeat);
     // Enable over-the-air updates
 #ifdef ENABLE_OTA
     EVERY_N_MILLISECONDS(1000)
     {
       ArduinoOTA.handle();
     }
+#endif
+#ifdef PRINT_LOOP_TIME
+    auto currentLoopTime = millis();
+    Serial.print(currentLoopTime - lastLoopTime);
+    Serial.println(" ms");
+    lastLoopTime = currentLoopTime;
 #endif
   }
 }

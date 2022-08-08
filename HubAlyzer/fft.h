@@ -8,7 +8,7 @@
 #include <functional>
 
 // FFT transform wrapper
-// SAMPLE_COUNT = Number of audio samples to use for FFT. This will again allocate the amount of 4-byte float values
+// SAMPLE_COUNT = Number of audio samples to use for FFT. Must be a power-of-two. This will again allocate the amount of 4-byte float values
 // SAMPLE_RATE = Audio sample rate in Hz
 template <unsigned SAMPLE_COUNT, unsigned SAMPLE_RATE_HZ = 48000>
 class FFT
@@ -21,13 +21,9 @@ public:
     {
     }
 
-    float *amplitudes()
-    {
-        return m_real;
-    }
-
     /// @brief Call to update FFT data from samples
-    void update()
+    /// @return Returns SAMPLE_COUNT amplitude values
+    float *calculate()
     {
         // apply windowing and FFT
         memset(m_imag, 0, sizeof(m_imag));
@@ -40,6 +36,7 @@ public:
         // m_fft.dcRemoval();
         // calculate magnitude values from real + imaginary values
         m_fft.complexToMagnitude();
+        return m_real;
     }
 
 private:
