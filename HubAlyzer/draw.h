@@ -1,8 +1,8 @@
 #pragma once
 
-#include <SmartMatrix.h>
-#include <FastLED.h>
+#include "color.h"
 
+#include <SmartMatrix.h>
 #include <cmath>
 
 template <int WIDTH, int HEIGHT, unsigned OPTIONS>
@@ -14,9 +14,9 @@ private:
   static constexpr int MaxX = Width - 1;
   static constexpr int MaxY = Height - 1;
 
-  rgb24 toRGB24(const CRGB &c)
+  rgb24 toRGB24(const RGBf &c)
   {
-    return rgb24{c.r, c.g, c.b};
+    return rgb24{static_cast<uint8_t>(255.0F * c.r), static_cast<uint8_t>(255.0F * c.g), static_cast<uint8_t>(255.0F * c.b)};
   }
 
   struct Point
@@ -48,7 +48,7 @@ private:
   {
     int x = band * (Width / NR_OF_BANDS);
     // color hue based on band
-    rgb24 color = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 255, 255)));
+    rgb24 color = toRGB24(RGBf(HSVf((float)band / (NR_OF_BANDS - 1), 1.0F, 1.0F)));
     // draw bar until last pixel
     float barHeightf = MaxY * value * scaleFactor;
     int barHeight = trunc(barHeightf);
@@ -60,12 +60,12 @@ private:
     }
     // draw final pixel
     float barRest = barHeightf - barHeight;
-    rgb24 restColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 255, 255 * barRest)));
+    rgb24 restColor = toRGB24(RGBf(HSVf((float)band / (NR_OF_BANDS - 1), 1.0F, barRest)));
     m_layer.drawPixel(x, invert ? y0 - (barHeight - 1) : y0 + (barHeight - 1), restColor);
     // draw peak
     if (peak > (0.5f / Height))
     {
-      rgb24 peakColor = toRGB24(CRGB(CHSV((band * 255) / (NR_OF_BANDS - 1), 100, 100)));
+      rgb24 peakColor = toRGB24(RGBf(HSVf((float)band / (NR_OF_BANDS - 1), 0.4F, 0.4F)));
       int peakY = MaxY * peak * scaleFactor;
       peakY = peakY < 0 ? 0 : peakY;
       peakY = peakY > MaxY ? MaxY : peakY;
@@ -82,7 +82,7 @@ public:
   template <int NR_OF_BANDS>
   void spectrumCentered(const float *levels, const float *peaks, bool isBeat)
   {
-    m_layer.fillScreen(toRGB24(CRGB(0, 0, 0)));
+    m_layer.fillScreen(rgb24{0, 0, 0});
     for (int i = 0; i < NR_OF_BANDS; i++)
     {
       displayBand<NR_OF_BANDS>(i, levels[i], peaks[i], Height / 2, 0.5f, true);
@@ -90,7 +90,7 @@ public:
     }
     if (isBeat)
     {
-      m_layer.drawPixel(0, 0, toRGB24(CRGB(255, 255, 255)));
+      m_layer.drawPixel(0, 0, rgb24{255, 255, 255});
     }
     m_layer.swapBuffers();
   }
@@ -98,7 +98,7 @@ public:
   template <int NR_OF_BANDS>
   void spectrumRays(const float *levels, const float *peaks, bool rotate)
   {
-    m_layer.fillScreen(toRGB24(CRGB(0, 0, 0)));
+    m_layer.fillScreen(rgb24{0, 0, 0});
     const Point center = {Width / 2, Height / 2};
     constexpr float angleDelta = 2.0f * M_PI / NR_OF_BANDS;
     angleStart += rotate ? 0.01F : 0;
@@ -110,14 +110,14 @@ public:
       float peakRadius = 1.5f * Height * peaks[i];
       if (levelRadius > 0.5f)
       {
-        rgb24 color = toRGB24(CRGB(CHSV((i * 255) / (NR_OF_BANDS - 1), 255, 255)));
+        rgb24 color = toRGB24(RGBf(HSVf((float)i / (NR_OF_BANDS - 1), 1.0F, 1.0F)));
         auto p1 = polarToCartesian(levelRadius, angle0);
         auto p2 = polarToCartesian(levelRadius, angle1);
         m_layer.fillTriangle(center.x, center.y, center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
       }
       if (peakRadius > 0.5f)
       {
-        rgb24 color = toRGB24(CRGB(CHSV((i * 255) / (NR_OF_BANDS - 1), 100, 100)));
+        rgb24 color = toRGB24(RGBf(HSVf((float)i / (NR_OF_BANDS - 1), 0.4F, 0.4F)));
         auto p1 = polarToCartesian(peakRadius, angle0);
         auto p2 = polarToCartesian(peakRadius, angle1);
         m_layer.drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);

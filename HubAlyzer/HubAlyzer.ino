@@ -10,7 +10,6 @@
 
    Requires the following libraries:
    Arduino Fast Fourier Transform library: https://github.com/kosme/arduinoFFT
-   FastLED v3.1 or higher: https://github.com/FastLED/FastLED/releases
    SmartMatrix v4 or higher: https://github.com/pixelmatix/SmartMatrix/releases
 */
 
@@ -84,7 +83,6 @@ BluetoothSerial SerialBT;
 
 // ------------------------------------------------------------------------------------------
 
-#include <FastLED.h>
 #define GPIOPINOUT ESP32_FORUM_PINOUT
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
@@ -120,6 +118,19 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
   if (event == ESP_SPP_CLOSE_EVT)
   {
     Serial.println("Client disconnected");
+  }
+}
+#endif
+
+#ifdef ENABLE_OTA
+void checkOTA()
+{
+  static auto lastCheckTime = millis();
+  auto now = millis();
+  if (now - lastCheckTime >= 2000)
+  {
+    lastCheckTime = now;
+    ArduinoOTA.handle();
   }
 }
 #endif
@@ -243,10 +254,7 @@ void loop()
     draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), isBeat);
     // Enable over-the-air updates
 #ifdef ENABLE_OTA
-    EVERY_N_MILLISECONDS(1000)
-    {
-      ArduinoOTA.handle();
-    }
+    checkOTA();
 #endif
 #ifdef PRINT_LOOP_TIME
     auto currentLoopTime = millis();
