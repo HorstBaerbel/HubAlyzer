@@ -18,37 +18,14 @@ public:
   // f = k / SAMPLE_COUNT * SAMPLE_RATE_HZ
   // -> Bin frequency to bin index k
   // k = f * SAMPLE_COUNT / SAMPLE_RATE_HZ
-  // Bin #0 is crap / DC offset, so we don't use it. Then we split the remaining bins logarithmicaly,
-  // that is, the number of bins the bars use increases logarithmicaly.
-  static constexpr float BIN_MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;                          // -> ~94Hz for 512 samples, 48kHz sample rate
-  static constexpr float BIN_LOG_START = 0;                                                          // 10^0 = 1, 10^0.305 = ~2
-  static constexpr float BIN_LOG_END = log10f(float(MAX_HZ * SAMPLE_COUNT) / float(SAMPLE_RATE_HZ)); // 10^2.23 = ~171) for 1024 samples, 48kHz sample rate
-  static constexpr float BIN_LOG_RANGE = BIN_LOG_END - BIN_LOG_START;
+  static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;         // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
+  static constexpr float BIN_START = 1;                                         // Bin #0 is crap / DC offset, so we don't use it
+  static constexpr float BIN_SIZE_HZ = float(SAMPLE_RATE_HZ) / SAMPLE_COUNT;    // Size of each FFT bin in Hz, ~46Hz at 48kHz and 512 samples
+  static constexpr float NR_OF_BINS = (MAX_HZ - MIN_HZ) / BIN_SIZE_HZ;          // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
+  static constexpr float BINS_PER_BAND = NR_OF_BINS / NR_OF_BANDS;              // # of bins needed for one band ~2.6 bins, for 32 bands up to 4kHz
+  static constexpr unsigned int FRACT_BINS_PER_BAND = std::ceil(BINS_PER_BAND); // # of bins we need to touch to calculate a band
 
   static constexpr float PeakDecayPerUpdate = (0.2f * SAMPLE_COUNT) / SAMPLE_RATE_HZ; // What amount the peaks decay per update call
-
-  /// @brief Construct a new spectrum analyzer
-  Spectrum()
-  {
-    // Serial.print("Log end: "); Serial.println(BIN_LOG_END);
-    //  build bin info, spacing frequency bars evenly on the logarithmic x-axis
-    unsigned int currentBin = 1;
-    for (int i = 0; i < NR_OF_BANDS; i++)
-    {
-      auto &bar = m_bands[i];
-      auto startBin = powf(10, BIN_LOG_START + (BIN_LOG_RANGE * i) / NR_OF_BANDS);
-      auto endBin = powf(10, BIN_LOG_START + (BIN_LOG_RANGE * (i + 1)) / NR_OF_BANDS);
-      auto bandBinCount = trunc(endBin - startBin);
-      bar.start = currentBin;
-      bar.end = currentBin + bandBinCount;
-      // float x = ((static_cast<float>(i) / (NR_OF_BANDS - 1)) / NR_OF_BANDS);
-      // bar.noiseLevel = std::max(0.0f, 0.3f - 8.0f * powf(x - 0.2f, 2));
-      currentBin = bar.end + 1;
-      // Serial.print(bar.start);
-      // Serial.print(", ");
-      // Serial.println(bar.end);
-    }
-  }
 
   /// @brief Get normalized level data. Read NR_OF_BANDS levels from this
   const float *levels() const
@@ -66,19 +43,26 @@ public:
   /// @p magnitudes Magnitude values for individual frequency bands from the FFT. Must be in the range [0,1]!
   void update(const float *magnitudes)
   {
-    Serial.println(m_bands[NR_OF_BANDS - 1].end);
     // calculate band levels
     float tempLevels[NR_OF_BANDS] = {0};
-    for (int bi = 0; bi < NR_OF_BANDS; bi++)
+    float binIndex = BIN_START;
+    float binRest = 1.0F;
+    for (int bandIndex = 0; bandIndex < NR_OF_BANDS; bandIndex++)
     {
-      auto const &band = m_bands[bi];
-      // accumulate levels
-      for (unsigned int mi = band.start; mi <= band.end; mi++)
+      // accumulate bins for band
+      unsigned int bandBinStart = static_cast<unsigned int>(binIndex);
+      float bandRest = BINS_PER_BAND;
+      float binFactor = binRest;
+      for (unsigned int i = 0; i < FRACT_BINS_PER_BAND; i++)
       {
-        tempLevels[bi] += magnitudes[mi];
+        tempLevels[bandIndex] += binFactor * magnitudes[bandBinStart + i];
+        bandRest -= binFactor;
+        binFactor = bandRest >= 1.0F ? 1.0F : bandRest;
       }
-      // average level
-      tempLevels[bi] /= band.end - band.start + 1;
+      binIndex += BINS_PER_BAND;
+      binRest = 1.0F - binFactor;
+      // average accumulated bins
+      tempLevels[bandIndex] *= 1.0F / BINS_PER_BAND;
     }
     // update band levels
     for (int i = 0; i < NR_OF_BANDS; i++)
@@ -90,13 +74,6 @@ public:
   }
 
 private:
-  struct BandInfo
-  {
-    unsigned int start = 0; // first FFT bin for band
-    unsigned int end = 0;   // last FFT bin for band
-  };
-  BandInfo m_bands[NR_OF_BANDS];
-
   float m_levels[NR_OF_BANDS] = {0};
   float m_peaks[NR_OF_BANDS] = {0};
 };

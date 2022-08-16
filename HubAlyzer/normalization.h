@@ -12,10 +12,14 @@
 template <unsigned SAMPLE_COUNT, unsigned int AUDIO_NOISE_DB = 33, unsigned int AUDIO_MAX_DB = 120, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
 class Normalization
 {
-  static constexpr unsigned int BINS_FOR_MAX_HZ = std::trunc(1.5F * (MAX_HZ * SAMPLE_COUNT) / SAMPLE_RATE_HZ);     // We need to generous here, as later stages might use more samples
+  static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;                                            // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
+  static constexpr float BIN_START = 1;                                                                            // Bin #0 is crap / DC offset, so we don't use it
+  static constexpr float BIN_SIZE_HZ = float(SAMPLE_RATE_HZ) / SAMPLE_COUNT;                                       // Size of each FFT bin in Hz, ~46Hz at 48kHz and 512 samples
+  static constexpr unsigned int BINS_FOR_MAX_HZ = std::ceil((MAX_HZ - MIN_HZ) / BIN_SIZE_HZ) + BIN_START;          // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
   static constexpr unsigned int NR_OF_BINS_USED = SAMPLE_COUNT < BINS_FOR_MAX_HZ ? SAMPLE_COUNT : BINS_FOR_MAX_HZ; // Maximum used bins from magnitudes array
-  static constexpr float AgcSpeedFactor = 0.01f;                                                                   // The speed of the "Automatic Gain Control" mechanism [0,1]
-  static constexpr float AgcKeepLevel = 10.0f;                                                                     // The maximum amount the "automatic gain control" mechanism will remove from the signal
+
+  static constexpr float AgcSpeedFactor = 0.01f; // The speed of the "Automatic Gain Control" mechanism [0,1]
+  static constexpr float AgcKeepLevel = 10.0f;   // The maximum amount the "automatic gain control" mechanism will remove from the signal
 
 public:
   /// @brief Construct a new normalizer
@@ -48,10 +52,10 @@ public:
     // check if we want to apply the AGC
     if (applyAGC)
     {
-      // get average and minimum of all bins
+      // get average and minimum of all bins except #0
       float tempAvg = 0.0f;
       float tempMin = AUDIO_MAX_DB;
-      for (unsigned int i = 0; i < NR_OF_BINS_USED; i++)
+      for (unsigned int i = BIN_START; i < NR_OF_BINS_USED; i++)
       {
         tempAvg += amplitudes[i];
         tempMin = amplitudes[i] < tempMin ? amplitudes[i] : tempMin;
