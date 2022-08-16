@@ -1,16 +1,12 @@
 !!! WORK IN PROGRESS !!!
 
-!!! WORK IN PROGRESS !!!
-
-!!! WORK IN PROGRESS !!!
-
 # HubAlyzer
 
 <p align="center">
     <img src="logo.svg" width=50%;" title="Logo">
 </p>
 
-An ESP32 spectrum analyzer display for HUB75 RGB LED panels and I2S microphones (INMP441). Uses the [ESP32 Arduino core](https://github.com/espressif/arduino-esp32), the [Smartmatrix v4](https://github.com/pixelmatix/SmartMatrix) RGB LED panel library, [my fork](https://github.com/HorstBaerbel/esp32-i2s-slm) of [Ivan Kostoski I2S microphone library](https://github.com/ikostoski/esp32-i2s-slm) and my [development version](https://github.com/HorstBaerbel/arduinoFFT) of the [ArduinoFFT](https://github.com/kosme/arduinoFFT/tree/develop) library. Also uses heavily modified parts of [Micro-Beat-Detection](https://github.com/Steppschuh/Micro-Beat-Detection) for beat detection.
+An ESP32 spectrum analyzer display for HUB75 RGB LED panels and I2S microphones (INMP441). Uses the [ESP32 Arduino core](https://github.com/espressif/arduino-esp32), the [Smartmatrix v4](https://github.com/pixelmatix/SmartMatrix) RGB LED panel library, [my fork](https://github.com/HorstBaerbel/esp32-i2s-slm) of [Ivan Kostoski I2S microphone library](https://github.com/ikostoski/esp32-i2s-slm) and my [development version](https://github.com/HorstBaerbel/arduinoFFT) of the [ArduinoFFT](https://github.com/kosme/arduinoFFT/tree/develop) library.
 
 <p align="center">
     <span>
@@ -21,7 +17,7 @@ An ESP32 spectrum analyzer display for HUB75 RGB LED panels and I2S microphones 
 
 ## Schematics
 
-The circuit is using the SmartMatrix ["forum pinout"](https://github.com/pixelmatix/SmartMatrix/blob/fdb60faf8b140326c75761ac29970e48ac9cc6db/src/MatrixHardware_ESP32_V0.h#L208) without any level shifters for the LED matrix. This working fine for me for two 32x16 matrices chained together. It includes the "E" pin for driving 64x64 matrices.
+The circuit is using the SmartMatrix ["forum pinout"](https://github.com/pixelmatix/SmartMatrix/blob/fdb60faf8b140326c75761ac29970e48ac9cc6db/src/MatrixHardware_ESP32_V0.h#L208) without any level shifters for the LED matrix. This is working fine for me for two 32x16 matrices chained together. It includes the "E" pin for driving 64x64 matrices.
 
 <p align="center">
     <span>
