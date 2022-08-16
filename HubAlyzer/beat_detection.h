@@ -18,13 +18,17 @@ T clamp(T value, T minimum, T maximum)
 template <unsigned SAMPLE_COUNT, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
 class BeatDetection
 {
-    static constexpr unsigned int NR_OF_BINS_USED = (MAX_HZ * SAMPLE_COUNT) / SAMPLE_RATE_HZ + 1; // Maximum used bins from magnitudes array
+    static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;                                   // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
+    static constexpr float BIN_START = 1;                                                                   // Bin #0 is crap / DC offset, so we don't use it
+    static constexpr float BIN_SIZE_HZ = float(SAMPLE_RATE_HZ) / SAMPLE_COUNT;                              // Size of each FFT bin in Hz, ~46Hz at 48kHz and 512 samples
+    static constexpr unsigned int BINS_FOR_MAX_HZ = std::ceil((MAX_HZ - MIN_HZ) / BIN_SIZE_HZ) + BIN_START; // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
+
     static constexpr float MAX_BEATS_PER_MINUTE = 200.0F;
     static constexpr float MIN_DELAY_BETWEEN_BEATS = 60000.0F / MAX_BEATS_PER_MINUTE;
     static constexpr float AVG_BEAT_DURATION = 100.0F;         // Good value range is [50:150]
     static constexpr unsigned int BEAT_MAGNITUDE_SAMPLES = 10; // Good value range is [5:15]
     static constexpr unsigned int NR_OF_BEATS = 3;             // Number of seperate beats to analyze. #0 contains overall values, #1 and #2 are actual beat values
-    static constexpr float BEAT_PROBABILITY_THRESHOLD = 0.5f;
+    static constexpr float BEAT_PROBABILITY_THRESHOLD = 0.025f;
 
     struct BeatInfo
     {
@@ -42,12 +46,12 @@ public:
     BeatDetection()
     {
         // build beat bin info
-        m_beats[0].start = 1;
-        m_beats[0].end = NR_OF_BINS_USED - 1;
-        m_beats[1].start = 1;
-        m_beats[1].end = m_beats[1].start + 2;
-        m_beats[2].start = 1;
-        m_beats[2].end = m_beats[2].start + 4;
+        m_beats[0].start = BIN_START;
+        m_beats[0].end = BINS_FOR_MAX_HZ - BIN_START;
+        m_beats[1].start = BIN_START;
+        m_beats[1].end = m_beats[1].start + 1;
+        m_beats[2].start = BIN_START;
+        m_beats[2].end = m_beats[2].start + 3;
     }
 
     /// @brief Call to update beat data
