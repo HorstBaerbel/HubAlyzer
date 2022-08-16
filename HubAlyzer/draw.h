@@ -92,7 +92,6 @@ public:
     {
       m_layer.drawPixel(0, 0, rgb24{255, 255, 255});
     }
-    m_layer.swapBuffers();
   }
 
   template <int NR_OF_BANDS>
@@ -123,7 +122,6 @@ public:
         m_layer.drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
       }
     }
-    m_layer.swapBuffers();
   }
 
 private:

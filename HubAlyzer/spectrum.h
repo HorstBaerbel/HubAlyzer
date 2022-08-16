@@ -27,21 +27,10 @@ public:
 
   static constexpr float PeakDecayPerUpdate = (0.2f * SAMPLE_COUNT) / SAMPLE_RATE_HZ; // What amount the peaks decay per update call
 
-  /// @brief Get normalized level data. Read NR_OF_BANDS levels from this
-  const float *levels() const
-  {
-    return m_levels;
-  }
-
-  /// @brief Get normalized peak data. Read NR_OF_BANDS peaks from this
-  const float *peaks() const
-  {
-    return m_peaks;
-  }
-
   /// @brief Call to update spectrum data
   /// @p magnitudes Magnitude values for individual frequency bands from the FFT. Must be in the range [0,1]!
-  void update(const float *magnitudes)
+  /// @return Returns (normalized level data, normalized peak data). Read NR_OF_BANDS values from this
+  std::pair<const float *, const float *> update(const float *magnitudes)
   {
     // calculate band levels
     float tempLevels[NR_OF_BANDS] = {0};
@@ -71,6 +60,7 @@ public:
       m_peaks[i] = m_levels[i] > m_peaks[i] ? m_levels[i] : (m_peaks[i] > 0 ? m_peaks[i] - PeakDecayPerUpdate : 0);
       // Serial.println(levels[i], 1);
     }
+    return {m_levels, m_peaks};
   }
 
 private:

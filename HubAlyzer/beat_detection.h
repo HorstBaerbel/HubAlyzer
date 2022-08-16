@@ -18,76 +18,63 @@ T clamp(T value, T minimum, T maximum)
 template <unsigned SAMPLE_COUNT, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
 class BeatDetection
 {
-    static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;                                   // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
-    static constexpr float BIN_START = 1;                                                                   // Bin #0 is crap / DC offset, so we don't use it
-    static constexpr float BIN_SIZE_HZ = float(SAMPLE_RATE_HZ) / SAMPLE_COUNT;                              // Size of each FFT bin in Hz, ~46Hz at 48kHz and 512 samples
-    static constexpr unsigned int BINS_FOR_MAX_HZ = std::ceil((MAX_HZ - MIN_HZ) / BIN_SIZE_HZ) + BIN_START; // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
+    static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;      // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
+    static constexpr float BIN_START = 1;                                      // Bin #0 is crap / DC offset, so we don't use it
+    static constexpr float BIN_SIZE_HZ = float(SAMPLE_RATE_HZ) / SAMPLE_COUNT; // Size of each FFT bin in Hz, ~46Hz at 48kHz and 512 samples
+    static constexpr float NR_OF_BINS = (MAX_HZ - MIN_HZ) / BIN_SIZE_HZ;       // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
 
-    static constexpr float MAX_BEATS_PER_MINUTE = 200.0F;
-    static constexpr float MIN_DELAY_BETWEEN_BEATS = 60000.0F / MAX_BEATS_PER_MINUTE;
-    static constexpr float AVG_BEAT_DURATION = 100.0F;         // Good value range is [50:150]
-    static constexpr unsigned int BEAT_MAGNITUDE_SAMPLES = 10; // Good value range is [5:15]
-    static constexpr unsigned int NR_OF_BEATS = 3;             // Number of seperate beats to analyze. #0 contains overall values, #1 and #2 are actual beat values
-    static constexpr float BEAT_PROBABILITY_THRESHOLD = 0.025f;
+    static constexpr float BEAT_PROBABILITY_THRESHOLD = 0.2f;
+    static constexpr float MIN_BEAT_INTERVAL_MS = 1000.0F / (180.0F / 60.0F);
 
-    struct BeatInfo
+    static constexpr unsigned int NR_OF_IIR_COEFFICIENTS = 4;
+
+    struct BandInfo
     {
-        unsigned int start = 0; // first FFT bin for beat
-        unsigned int end = 0;   // last FFT bin for beat
-        float current = 0;
-        float runningTotal = 0;
-        float runningAverage = 0;
-        float variance = 0;
-        float history[BEAT_MAGNITUDE_SAMPLES] = {0};
+        unsigned int start = 0;
+        unsigned int end = 0;
+        float y[NR_OF_IIR_COEFFICIENTS + 1] = {0}; // output samples
+        float x[NR_OF_IIR_COEFFICIENTS + 1] = {0}; // input samples
     };
 
 public:
+    static constexpr unsigned int NR_OF_BANDS = 2; // # of beat bands analyzed
+
     /// @brief Construct a new beat detector
     BeatDetection()
     {
         // build beat bin info
-        m_beats[0].start = BIN_START;
-        m_beats[0].end = BINS_FOR_MAX_HZ - BIN_START;
-        m_beats[1].start = BIN_START;
-        m_beats[1].end = m_beats[1].start + 1;
-        m_beats[2].start = BIN_START;
-        m_beats[2].end = m_beats[2].start + 3;
+        m_bands[0].start = BIN_START;
+        m_bands[0].end = m_bands[0].start;
+        m_bands[1].start = m_bands[0].end + 1;
+        m_bands[1].end = m_bands[1].start;
     }
 
     /// @brief Call to update beat data
     /// @p magnitudes Magnitude values for individual frequency bands from the FFT. Must be in the range [0,1]!
-    void update(const float *magnitudes)
+    const float *update(const float *magnitudes)
     {
-        for (int i = 0; i < NR_OF_BEATS; i++)
+        // calculate band levels
+        for (int bandIndex = 0; bandIndex < NR_OF_BANDS; bandIndex++)
         {
-            auto &beat = m_beats[i];
-            // calculate average magnitudes of beat bin
-            beat.current = getAverageMagnitude(beat, magnitudes);
-            // process beat bin history values
-            updateHistoryValues(beat, m_magnitudeSampleIndex);
-        }
-        for (int i = 0; i < NR_OF_BEATS; i++)
-        {
-            const auto &beat = m_beats[i];
-            // Serial_printf("%f, %f, %f | ", beat.current, beat.runningAverage, beat.variance);
-        }
-        // Serial.println("");
-        //  prepare the magnitude sample index for the next update
-        m_magnitudeSampleIndex++;
-        if (m_magnitudeSampleIndex >= BEAT_MAGNITUDE_SAMPLES)
-        {
-            m_magnitudeSampleIndex = 0;
+            // accumulate bins for band
+            auto &band = m_bands[bandIndex];
+            float tempLevel = 0;
+            for (unsigned int i = band.start; i <= band.end; i++)
+            {
+                tempLevel += magnitudes[i];
+            }
+            // average accumulated bins
+            tempLevel /= band.end - band.start + 1;
+            m_probabilities[bandIndex] = beatFilter(band, tempLevel);
         }
         // calculate beat probability
-        auto magnitudeChange = calculateMagnitudeChangeFactor();
-        auto variance = calculateVarianceFactor();
-        auto recency = calculateRecencyFactor();
-        // Serial_printf("%f, %f, %f\n", magnitudeChange, variance, recency);
-        auto beatProbability = magnitudeChange * variance * recency;
-        if (beatProbability >= BEAT_PROBABILITY_THRESHOLD)
+        auto beatProbability = m_probabilities[0] + m_probabilities[1];
+        // Serial_printf("%f\n", beatProbability);
+        if (beatProbability >= BEAT_PROBABILITY_THRESHOLD && (millis() - m_lastBeatTimestamp) > MIN_BEAT_INTERVAL_MS)
         {
             m_lastBeatTimestamp = millis();
         }
+        return m_probabilities;
     }
 
     long timeSinceLastBeatMs() const
@@ -96,98 +83,40 @@ public:
     }
 
 private:
-    float getAverageMagnitude(const BeatInfo &beat, const float *magnitudes)
+    // IIR filter function
+    float beatFilter(BandInfo &band, float sample)
     {
-        float total = 0.0F;
-        for (unsigned int i = beat.start; i <= beat.end; i++)
+        // 2nd order IIR bandpass from 1Hz->3Hz @ 60Hz sampling rate
+        static constexpr float IIRCoefficientsA[NR_OF_IIR_COEFFICIENTS + 1] = {
+            0.01011856610623769600,
+            0.00000000000000000000,
+            -0.02023713221247539300,
+            0.00000000000000000000,
+            0.01011856610623769600};
+
+        static constexpr float IIRCoefficientsB[NR_OF_IIR_COEFFICIENTS + 1] = {
+            1.00000000000000000000,
+            -3.64454212364758230000,
+            5.04211562372784350000,
+            -3.14029368609864170000,
+            0.74365519504831146000};
+        // shift the old samples
+        for (unsigned int n = NR_OF_IIR_COEFFICIENTS; n > 0; n--)
         {
-            total += magnitudes[i];
+            band.x[n] = band.x[n - 1];
+            band.y[n] = band.y[n - 1];
         }
-        return total / (beat.end - beat.start + 1);
+        // calculate the new output
+        band.x[0] = sample;
+        band.y[0] = IIRCoefficientsA[0] * band.x[0];
+        for (unsigned int n = 1; n <= NR_OF_IIR_COEFFICIENTS; n++)
+        {
+            band.y[0] += IIRCoefficientsA[n] * band.x[n] - IIRCoefficientsB[n] * band.y[n];
+        }
+        return band.y[0];
     }
 
-    void updateHistoryValues(BeatInfo &beat, unsigned int sampleIndex)
-    {
-        beat.runningTotal -= beat.history[sampleIndex]; // subtract the oldest history value from the running total
-        beat.runningTotal += beat.current;              // add the current value to the running total
-        beat.history[sampleIndex] = beat.current;       // set the current value in the history
-        beat.runningAverage = beat.runningTotal / BEAT_MAGNITUDE_SAMPLES;
-        // update the variance of frequency magnitudes
-        float squaredDiffSum = 0;
-        for (int i = 0; i < BEAT_MAGNITUDE_SAMPLES; i++)
-        {
-            auto magnitudeDiff = beat.history[i] - beat.runningAverage;
-            squaredDiffSum += magnitudeDiff * magnitudeDiff;
-        }
-        beat.variance = squaredDiffSum / BEAT_MAGNITUDE_SAMPLES;
-    }
-
-    // Will calculate a value in range [0,1] based on the magnitude changes of different frequency bands. Low values are indicating a low beat probability.
-    float calculateMagnitudeChangeFactor()
-    {
-        // current overall magnitude is higher than the average, probably because the signal is mainly noise
-        float aboveAverageOverallMagnitudeFactor = m_beats[0].current / m_beats[0].runningAverage;
-        // Serial_printf("%f, ", aboveAverageOverallMagnitudeFactor);
-        aboveAverageOverallMagnitudeFactor *= 10;
-        aboveAverageOverallMagnitudeFactor = clamp(aboveAverageOverallMagnitudeFactor, 0.0F, 1.0F);
-        // current magnitude is higher than the average, probably because there's a beat right now
-        float aboveAverageFirstMagnitudeFactor = m_beats[1].current / m_beats[1].runningAverage;
-        // Serial_printf("%f, ", aboveAverageFirstMagnitudeFactor);
-        aboveAverageFirstMagnitudeFactor *= 1.5;
-        aboveAverageFirstMagnitudeFactor = pow(aboveAverageFirstMagnitudeFactor, 3);
-        aboveAverageFirstMagnitudeFactor /= 3;
-        aboveAverageFirstMagnitudeFactor = clamp(aboveAverageFirstMagnitudeFactor, 0.0F, 1.0F);
-        float aboveAverageSecondMagnitudeFactor = m_beats[2].current / m_beats[2].runningAverage;
-        // Serial_printf("%f\n", aboveAverageSecondMagnitudeFactor);
-        aboveAverageSecondMagnitudeFactor *= 10;
-        aboveAverageSecondMagnitudeFactor = clamp(aboveAverageSecondMagnitudeFactor, 0.0F, 1.0F);
-        // combine values into magnitude change
-        float magnitudeChangeFactor = aboveAverageFirstMagnitudeFactor;
-        if (magnitudeChangeFactor > 0.15)
-        {
-            magnitudeChangeFactor = std::max(aboveAverageFirstMagnitudeFactor, aboveAverageSecondMagnitudeFactor);
-        }
-
-        if (magnitudeChangeFactor < 0.5 && aboveAverageOverallMagnitudeFactor > 0.5)
-        {
-            // there's no bass related beat, but the overall magnitude changed significantly
-            magnitudeChangeFactor = std::max(magnitudeChangeFactor, aboveAverageOverallMagnitudeFactor);
-        }
-        else
-        {
-            // this is here to avoid treating signal noise as beats
-            // magnitudeChangeFactor *= 1 - aboveAverageOverallMagnitudeFactor;
-        }
-        return magnitudeChangeFactor;
-    }
-
-    // Will calculate a value in range [0,1] based on variance in the first and second* frequency band over time.
-    // The variance will be high if the magnitude of bass frequencies changed in the last few milliseconds. Low values are indicating a low beat probability.
-    float calculateVarianceFactor()
-    {
-        // a beat also requires a high variance in recent frequency magnitudes
-        float firstVarianceFactor = ((m_beats[1].variance - 50.0F) / 20.0F) - 1.0F;
-        firstVarianceFactor = clamp(firstVarianceFactor, 0.0F, 1.0F);
-        float secondVarianceFactor = ((m_beats[2].variance - 50.0F) / 20.0F) - 1.0F;
-        secondVarianceFactor = clamp(secondVarianceFactor, 0.0F, 1.0F);
-        float varianceFactor = std::max(firstVarianceFactor, secondVarianceFactor);
-        return varianceFactor;
-    }
-
-    // Will calculate a value in range [0,1] based on the recency of the last detected beat. Low values are indicating a low beat probability.
-    float calculateRecencyFactor()
-    {
-        float recencyFactor = 1.0F;
-        auto durationSinceLastBeat = millis() - m_lastBeatTimestamp;
-        float referenceDuration = MIN_DELAY_BETWEEN_BEATS - AVG_BEAT_DURATION;
-        recencyFactor = 1.0F - (referenceDuration / durationSinceLastBeat);
-        recencyFactor = clamp(recencyFactor, 0.0F, 1.0F);
-        return recencyFactor;
-    }
-
-    BeatInfo m_beats[NR_OF_BEATS]; // beat values. #0 contains overall values, #1 and #2 are actual beat values
+    BandInfo m_bands[NR_OF_BANDS];
+    float m_probabilities[NR_OF_BANDS] = {0};
     long m_lastBeatTimestamp = 0;
-    std::function<float(float)> m_amplitudeToDb{};
-    unsigned int m_magnitudeSampleIndex = 0; // which index of BeatInfo::magnitudes will be samples next
-    float *m_amplitudes = nullptr;
 };

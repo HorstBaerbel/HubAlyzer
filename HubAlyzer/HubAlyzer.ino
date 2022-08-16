@@ -246,12 +246,13 @@ void loop()
     // apply FFT to samples and return amplitudes
     auto amplitudes = fft.calculate();
     auto magnitudes = normalization.apply(amplitudes);
-    spectrum.update(magnitudes);
-    beats.update(magnitudes);
-    bool isBeat = beats.timeSinceLastBeatMs() < 500;
-    // Serial.println(beats.timeSinceLastBeatMs());
-    //  draw.spectrumRays<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), true);
-    draw.spectrumCentered<NR_OF_BANDS>(spectrum.levels(), spectrum.peaks(), isBeat);
+    auto [levels, peaks] = spectrum.update(magnitudes);
+    auto probabilities = beats.update(levels);
+    bool isBeat = beats.timeSinceLastBeatMs() < 100;
+    //  Serial.println(beats.timeSinceLastBeatMs());
+    //   draw.spectrumRays<NR_OF_BANDS>(levels, peaks, true);
+    draw.spectrumCentered<NR_OF_BANDS>(levels, peaks, isBeat);
+    backgroundLayer.swapBuffers();
     // Enable over-the-air updates
 #ifdef ENABLE_OTA
     checkOTA();
