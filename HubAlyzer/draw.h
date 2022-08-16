@@ -65,7 +65,7 @@ private:
     // draw peak
     if (peak > (0.5f / Height))
     {
-      rgb24 peakColor = toRGB24(RGBf(HSVf((float)band / (NR_OF_BANDS - 1), 0.4F, 0.4F)));
+      rgb24 peakColor = toRGB24(RGBf(HSVf((float)band / (NR_OF_BANDS - 1), 0.4F, 0.2F)));
       int peakY = MaxY * peak * scaleFactor;
       peakY = peakY < 0 ? 0 : peakY;
       peakY = peakY > MaxY ? MaxY : peakY;
@@ -117,7 +117,7 @@ public:
       }
       if (peakRadius > 0.5f)
       {
-        rgb24 color = toRGB24(RGBf(HSVf((float)i / (NR_OF_BANDS - 1), 0.4F, 0.4F)));
+        rgb24 color = toRGB24(RGBf(HSVf((float)i / (NR_OF_BANDS - 1), 0.4F, 0.2F)));
         auto p1 = polarToCartesian(peakRadius, angle0);
         auto p2 = polarToCartesian(peakRadius, angle1);
         m_layer.drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);

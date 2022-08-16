@@ -62,37 +62,27 @@ struct HSVf
 RGBf RGBf::fromHSV(const HSVf &hsv)
 {
     RGBf rgb;
-    auto c = hsv.v * hsv.s;
-    auto x = c * (1.0F - std::abs(std::fmod(6.0F * hsv.h, 2.0F) - 1.0F));
-    auto m = hsv.v - c;
-    if (hsv.h < (60.0F / 360.0F))
+    auto hf = hsv.h * 6.0F;
+    const auto hi = static_cast<int>(hf);
+    auto f = hf - hi;
+    auto p = hsv.v * (1.0F - hsv.s);
+    auto q = hsv.v * (1.0F - hsv.s * f);
+    auto t = hsv.v * (1.0F - hsv.s * (1.0F - f));
+    switch (hi)
     {
-        rgb = RGBf(c, x, 0.0F);
+    case 1:
+        return RGBf(q, hsv.v, p);
+    case 2:
+        return RGBf(p, hsv.v, t);
+    case 3:
+        return RGBf(p, q, hsv.v);
+    case 4:
+        return RGBf(t, p, hsv.v);
+    case 5:
+        return RGBf(hsv.v, p, q);
+    default:
+        return RGBf(hsv.v, t, p);
     }
-    else if (hsv.h < (120.0F / 360.0F))
-    {
-        rgb = RGBf(x, c, 0.0F);
-    }
-    else if (hsv.h < (180.0F / 360.0F))
-    {
-        rgb = RGBf(0.0F, c, x);
-    }
-    else if (hsv.h < (240.0F / 360.0F))
-    {
-        rgb = RGBf(0.0F, x, c);
-    }
-    else if (hsv.h < (300.0F / 360.0F))
-    {
-        rgb = RGBf(x, 0.0F, c);
-    }
-    else
-    {
-        rgb = RGBf(c, 0.0F, x);
-    }
-    rgb.r += m;
-    rgb.g += m;
-    rgb.b += m;
-    return rgb;
 }
 
 HSVf HSVf::fromRGB(const RGBf &rgb)
@@ -101,13 +91,13 @@ HSVf HSVf::fromRGB(const RGBf &rgb)
     auto cMax = std::max(std::max(rgb.r, rgb.g), rgb.b);
     auto cMin = std::min(std::min(rgb.r, rgb.g), rgb.b);
     auto cDelta = cMax - cMin;
-    if (cDelta == 0)
+    if (cDelta < 0.0001F)
     {
-        hsv.h = 0;
+        hsv.h = 0.0F;
     }
     else if (cMax == rgb.r)
     {
-        hsv.h = (60.0F / 360.0F) * std::fmod((rgb.g - rgb.b) / cDelta, 6.0F);
+        hsv.h = (60.0F / 360.0F) * ((rgb.g - rgb.b) / cDelta + 0.0F);
     }
     else if (cMax == rgb.g)
     {
@@ -117,6 +107,7 @@ HSVf HSVf::fromRGB(const RGBf &rgb)
     {
         hsv.h = (60.0F / 360.0F) * ((rgb.r - rgb.g) / cDelta + 4.0F);
     }
+    hsv.h = hsv.h < 0.0F ? hsv.h + 1.0F : hsv.h;
     hsv.s = cMax == 0 ? 0 : cDelta / cMax;
     hsv.v = cMax;
     return hsv;
