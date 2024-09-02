@@ -15,28 +15,27 @@
 
 #include "esp32-i2s-slm/filters.h"
 #include "esp32-i2s-slm/i2s_mic.h"
-#include "approx.h" // fast log10f and sincosf approximation
+#include "approx.h"  // fast log10f and sincosf approximation
 #include <cmath>
 
-static constexpr unsigned SAMPLE_RATE_HZ = 48000; // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-static constexpr unsigned SAMPLE_COUNT = 512;     // ~10ms sample time, must be power-of-two
-float samples[SAMPLE_COUNT];                      // Raw microphone sample storage
+static constexpr unsigned SAMPLE_RATE_HZ = 48000;  // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
+static constexpr unsigned SAMPLE_COUNT = 512;      // ~10ms sample time, must be power-of-two
+float samples[SAMPLE_COUNT];                       // Raw microphone sample storage
 
 // NOTE: Some microphones require at least a DC-Blocker filter
-#define MIC_EQUALIZER INMP441                   // See below for defined IIR filters or set to 'None' to disable
-static constexpr float MIC_OFFSET_DB = 3.0103f; // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
+#define MIC_EQUALIZER INMP441                    // See below for defined IIR filters or set to 'None' to disable
+static constexpr float MIC_OFFSET_DB = 3.0103f;  // Default offset (sine-wave RMS vs. dBFS). Modify this value for linear calibration
 // Customize these values from microphone datasheet
-static constexpr int MIC_SENSITIVITY = -26.0f; // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
-static constexpr int MIC_REF_DB = 94.0f;       // Value at which point sensitivity is specified in datasheet (dB)
-static constexpr int MIC_OVERLOAD_DB = 120.0f; // dB - Acoustic overload point / Maximum Acoustic Input
-static constexpr int MIC_NOISE_DB = 33.0f;     // dB - Noise floor
-static constexpr unsigned MIC_BITS = 24;       // valid number of bits in I2S data
+static constexpr int MIC_SENSITIVITY = -26.0f;  // dBFS value expected at MIC_REF_DB (Sensitivity value from datasheet)
+static constexpr int MIC_REF_DB = 94.0f;        // Value at which point sensitivity is specified in datasheet (dB)
+static constexpr int MIC_OVERLOAD_DB = 120.0f;  // dB - Acoustic overload point / Maximum Acoustic Input
+static constexpr int MIC_NOISE_DB = 33.0f;      // dB - Noise floor
+static constexpr unsigned MIC_BITS = 24;        // valid number of bits in I2S data
 
-constexpr float MIC_REF_AMPL = powf(10.0f, float(MIC_SENSITIVITY) / 20.0f) * ((1 << (MIC_BITS - 1)) - 1); // Microphone reference amplitude value
+constexpr float MIC_REF_AMPL = powf(10.0f, float(MIC_SENSITIVITY) / 20.0f) * ((1 << (MIC_BITS - 1)) - 1);  // Microphone reference amplitude value
 
 // Convert microphone amplitude to dB values
-float MicAmplitudeToDb(float v)
-{
+float MicAmplitudeToDb(float v) {
   return MIC_OFFSET_DB + MIC_REF_DB + 20.0f * log10f_fast(v / MIC_REF_AMPL);
 }
 
@@ -83,60 +82,67 @@ BluetoothSerial SerialBT;
 
 // ------------------------------------------------------------------------------------------
 
+#ifndef GPIO_PIN_MUX_REG
+#include "esp32-hal.h"
+#include "hal/gpio_types.h"
+#include "soc/gpio_periph.h"
+#endif
+
 #define GPIOPINOUT ESP32_FORUM_PINOUT
 #include <MatrixHardware_ESP32_V0.h>
 #include <SmartMatrix.h>
 
-#define COLOR_DEPTH 24                                                   // known working: 24, 48 - If the sketch uses type `rgb24` directly, COLOR_DEPTH must be 24
-static constexpr unsigned kMatrixWidth = 32;                             // known working: 32, 64, 96, 128
-static constexpr unsigned kMatrixHeight = 32;                            // known working: 16, 32, 48, 64
-static constexpr unsigned kRefreshDepth = 24;                            // known working: 24, 36, 48
-static constexpr unsigned kDmaBufferRows = 4;                            // known working: 2-4, use 2 to save memory, more to keep from dropping frames and automatically lowering refresh rate
-static constexpr unsigned kPanelType = SMARTMATRIX_HUB75_16ROW_MOD8SCAN; // use SMARTMATRIX_HUB75_16ROW_MOD8SCAN for common 16x32 panels
-static constexpr unsigned kMatrixOptions = (SM_HUB75_OPTIONS_NONE);      // see http://docs.pixelmatix.com/SmartMatrix for options
+#define COLOR_DEPTH 24                                                    // known working: 24, 48 - If the sketch uses type `rgb24` directly, COLOR_DEPTH must be 24
+static constexpr unsigned kMatrixWidth = 32;                              // known working: 32, 64, 96, 128
+static constexpr unsigned kMatrixHeight = 32;                             // known working: 16, 32, 48, 64
+static constexpr unsigned kRefreshDepth = 24;                             // known working: 24, 36, 48
+static constexpr unsigned kDmaBufferRows = 4;                             // known working: 2-4, use 2 to save memory, more to keep from dropping frames and automatically lowering refresh rate
+static constexpr unsigned kPanelType = SMARTMATRIX_HUB75_16ROW_MOD8SCAN;  // use SMARTMATRIX_HUB75_16ROW_MOD8SCAN for common 16x32 panels
+static constexpr unsigned kMatrixOptions = (SM_HUB75_OPTIONS_NONE);       // see http://docs.pixelmatix.com/SmartMatrix for options
 static constexpr unsigned kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
 SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
 SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
 
 // ------------------------------------------------------------------------------------------
 
-#include "draw.h"
+#include "effectpipeline.h"
+#include "effects_draw.h"
+#include "effects_spectrum.h"
+#include "screen.h"
 
-auto draw = Draw<kMatrixWidth, kMatrixHeight, kBackgroundLayerOptions>(backgroundLayer);
+auto screen = SMLayerScreen<kMatrixWidth, kMatrixHeight, kBackgroundLayerOptions>(backgroundLayer);
+auto effects = std::vector<Effect::SPtr>({ std::make_shared<Effects::FillColor<kMatrixWidth, kMatrixHeight>>(), std::make_shared<Effects::DrawSpectrum<kMatrixWidth, kMatrixHeight, NR_OF_BANDS>>() });
+auto pipeline = EffectPipeline<kMatrixWidth, kMatrixHeight>(effects);
+
+// TODO: Functions to randomize effect pipeline and configure effects
 
 // ------------------------------------------------------------------------------------------
 
 #ifdef ENABLE_BLUETOOTH
-void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
-{
+void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   Serial.print("Bluetooth event: ");
   Serial.println(event);
-  if (event == ESP_SPP_SRV_OPEN_EVT)
-  {
+  if (event == ESP_SPP_SRV_OPEN_EVT) {
     Serial.println("Client Connected");
   }
-  if (event == ESP_SPP_CLOSE_EVT)
-  {
+  if (event == ESP_SPP_CLOSE_EVT) {
     Serial.println("Client disconnected");
   }
 }
 #endif
 
 #ifdef ENABLE_OTA
-void checkOTA()
-{
+void checkOTA() {
   static auto lastCheckTime = millis();
   auto now = millis();
-  if (now - lastCheckTime >= 2000)
-  {
+  if (now - lastCheckTime >= 2000) {
     lastCheckTime = now;
     ArduinoOTA.handle();
   }
 }
 #endif
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
   Serial.println("Running setup");
   // Generate host name for WiFi and Bluetooth
@@ -150,40 +156,41 @@ void setup()
   WiFi.hostname(hostName);
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifiSsid, wifiPassword);
-  while (WiFi.waitForConnectResult() != WL_CONNECTED)
-  {
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("WiFi connection Failed! Rebooting...");
     delay(5000);
     ESP.restart();
   }
   // Set up OTA updates
   Serial.println("Setting up OTA updates");
-  ArduinoOTA.onStart([]()
-                     {
-                       String type;
-                       if (ArduinoOTA.getCommand() == U_FLASH)
-                         type = "sketch";
-                       else // U_SPIFFS
-                         type = "filesystem";
-                       // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-                       Serial.println("Start updating " + type); })
-      .onEnd([]()
-             { Serial.println("\nEnd"); })
-      .onProgress([](unsigned int progress, unsigned int total)
-                  { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); })
-      .onError([](ota_error_t error)
-               {
-                 Serial.printf("Error[%u]: ", error);
-                 if (error == OTA_AUTH_ERROR)
-                   Serial.println("Auth Failed");
-                 else if (error == OTA_BEGIN_ERROR)
-                   Serial.println("Begin Failed");
-                 else if (error == OTA_CONNECT_ERROR)
-                   Serial.println("Connect Failed");
-                 else if (error == OTA_RECEIVE_ERROR)
-                   Serial.println("Receive Failed");
-                 else if (error == OTA_END_ERROR)
-                   Serial.println("End Failed"); });
+  ArduinoOTA.onStart([]() {
+              String type;
+              if (ArduinoOTA.getCommand() == U_FLASH)
+                type = "sketch";
+              else  // U_SPIFFS
+                type = "filesystem";
+              // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+              Serial.println("Start updating " + type);
+            })
+    .onEnd([]() {
+      Serial.println("\nEnd");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR)
+        Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR)
+        Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR)
+        Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR)
+        Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR)
+        Serial.println("End Failed");
+    });
   ArduinoOTA.begin();
   Serial.print("Hostname: ");
   Serial.println(hostName);
@@ -197,23 +204,17 @@ void setup()
 
 #ifdef ENABLE_BLUETOOTH
   // SerialBT.register_callback(bluetoothCallback);
-  if (!SerialBT.begin(hostName))
-  {
+  if (!SerialBT.begin(hostName)) {
     Serial.println("An error occurred initializing Bluetooth!");
-  }
-  else
-  {
+  } else {
     Serial.print("Bluetooth initialized. Device name is ");
     Serial.println(hostName);
   }
   // Set up Bluetooth classic for legacy pairing
-  if (esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_FIXED, strlen(bluetoothPinCode), reinterpret_cast<uint8_t *>(bluetoothPinCode)) == ESP_OK)
-  {
+  if (esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_FIXED, strlen(bluetoothPinCode), reinterpret_cast<uint8_t *>(bluetoothPinCode)) == ESP_OK) {
     Serial.print("Bluetooth pin code set to ");
     Serial.println(bluetoothPinCode);
-  }
-  else
-  {
+  } else {
     Serial.println("Setting bluetooth pin code failed!");
   }
 #endif
@@ -234,12 +235,14 @@ void setup()
 long lastLoopTime = 0;
 #endif
 
-void loop()
-{
+void loop() {
   Serial.println("Starting loop");
   // Get samples from other ESP32 core that receives the I2S audio data
-  while (xQueueReceive(mic.sampleQueue(), &samples, portMAX_DELAY))
-  {
+  while (xQueueReceive(mic.sampleQueue(), &samples, portMAX_DELAY)) {
+    /*for (int i = 0; i < SAMPLE_COUNT/4; ++i)
+    {
+      Serial.print(String(samples[i], 2) + String(", "));
+    }*/
     // apply A-Weighting filter for perceptive loudness. See: https://www.noisemeters.com/help/faq/frequency-weighting/
     A_weighting.applyFilters(samples, samples, SAMPLE_COUNT);
     A_weighting.applyGain(samples, samples, SAMPLE_COUNT);
@@ -250,9 +253,9 @@ void loop()
     auto probabilities = beats.update(levels);
     bool isBeat = beats.timeSinceLastBeatMs() < 100;
     //  Serial.println(beats.timeSinceLastBeatMs());
-    //   draw.spectrumRays<NR_OF_BANDS>(levels, peaks, true);
-    draw.spectrumCentered<NR_OF_BANDS>(levels, peaks, isBeat);
-    backgroundLayer.swapBuffers();
+    pipeline.render(levels, peaks, isBeat);
+    screen.blit(pipeline.output());
+    screen.swap();
     // Enable over-the-air updates
 #ifdef ENABLE_OTA
     checkOTA();
