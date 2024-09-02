@@ -48,29 +48,60 @@ namespace Effects
     void displayBand(RGBf *dest, int band, float value, float peak, int y0, float scaleFactor, bool invert)
     {
       int x = band * (Width / NrOfBands);
+      x = x < 0 ? 0 : x;
+      x = x > MaxX ? MaxX : x;
       // color hue based on band
       auto color = RGBf(HSVf((float)band / (NrOfBands - 1), 1.0F, 1.0F));
       // draw bar until last pixel
       float barHeightf = MaxY * value * scaleFactor;
       int barHeight = trunc(barHeightf);
-      barHeight = barHeight < 0 ? 0 : barHeight;
-      barHeight = barHeight > MaxY ? MaxY : barHeight;
-      for (int y = 0; y < barHeight - 1; y++)
+      if (invert)
       {
-        dest[(invert ? y0 - y : y0 + y) * WIDTH + x] = color;
+        // draw top-down
+        auto yMin = (y0 - barHeight) < 0 ? 0 : (y0 - barHeight);
+        for (int y = y0; y > yMin; y--)
+        {
+          dest[y * WIDTH + x] = color;
+        }
+        // draw final pixel
+        if (yMin > 0)
+        {
+          float barRest = barHeightf - barHeight;
+          auto restColor = RGBf(HSVf((float)band / (NrOfBands - 1), 1.0F, barRest));
+          dest[yMin * WIDTH + x] = restColor;
+        }
       }
-      // draw final pixel
-      float barRest = barHeightf - barHeight;
-      auto restColor = RGBf(HSVf((float)band / (NrOfBands - 1), 1.0F, barRest));
-      dest[(invert ? y0 - (barHeight - 1) : y0 + (barHeight - 1)) * WIDTH + x] = restColor;
+      else
+      {
+        // draw bottom-up
+        auto yMax = (y0 + barHeight) > MaxY ? MaxY : (y0 + barHeight);
+        for (int y = y0; y < yMax; y++)
+        {
+          dest[y * WIDTH + x] = color;
+        }
+        // draw final pixel
+        if (yMax < MaxY)
+        {
+          float barRest = barHeightf - barHeight;
+          auto restColor = RGBf(HSVf((float)band / (NrOfBands - 1), 1.0F, barRest));
+          dest[yMax * WIDTH + x] = restColor;
+        }
+      }
       // draw peak
       if (peak > (0.5f / Height))
       {
         auto peakColor = RGBf(HSVf((float)band / (NrOfBands - 1), 0.4F, 0.2F));
         int peakY = MaxY * peak * scaleFactor;
-        peakY = peakY < 0 ? 0 : peakY;
-        peakY = peakY > MaxY ? MaxY : peakY;
-        dest[(invert ? y0 - peakY : y0 + peakY) * WIDTH + x] = peakColor;
+        if (invert)
+        {
+          auto peakMin = (y0 - peakY) < 0 ? 0 : (y0 - peakY);
+          dest[peakMin * WIDTH + x] = peakColor;
+        }
+        else
+        {
+          auto peakMax = (y0 + peakY) > MaxY ? MaxY : (y0 + peakY);
+          dest[peakMax * WIDTH + x] = peakColor;
+        }
       }
     }
 
