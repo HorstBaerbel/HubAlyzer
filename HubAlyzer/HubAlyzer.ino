@@ -19,7 +19,7 @@
 #include <cmath>
 
 static constexpr unsigned SAMPLE_RATE_HZ = 48000;  // Hz, fixed to design of IIR filters. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
-static constexpr unsigned SAMPLE_COUNT = 512;      // ~10ms sample time, must be power-of-two
+static constexpr unsigned SAMPLE_COUNT = 1024;      // ~10ms sample time, must be power-of-two
 float samples[SAMPLE_COUNT];                       // Raw microphone sample storage
 
 // NOTE: Some microphones require at least a DC-Blocker filter
@@ -54,7 +54,7 @@ static constexpr unsigned MAX_ANALYSIS_FREQUENCY_HZ = 4000;
 auto fft = FFT<SAMPLE_COUNT, SAMPLE_RATE_HZ>(&samples);
 auto normalization = Normalization<SAMPLE_COUNT, MIC_NOISE_DB, MIC_OVERLOAD_DB, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>(MicAmplitudeToDb);
 auto spectrum = Spectrum<SAMPLE_COUNT, NR_OF_BANDS, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>();
-auto beats = BeatDetection<SAMPLE_COUNT, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ>();
+auto beats = BeatDetection<SAMPLE_COUNT, MAX_ANALYSIS_FREQUENCY_HZ, SAMPLE_RATE_HZ, 50>();
 
 // ------------------------------------------------------------------------------------------
 
@@ -108,10 +108,12 @@ SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeig
 #include "effectpipeline.h"
 #include "effects_draw.h"
 #include "effects_spectrum.h"
+#include "effects_feedback.h"
 #include "screen.h"
 
 auto screen = SMLayerScreen<kMatrixWidth, kMatrixHeight, kBackgroundLayerOptions>(backgroundLayer);
-auto effects = std::vector<Effect::SPtr>({ std::make_shared<Effects::FillColor<kMatrixWidth, kMatrixHeight>>(), std::make_shared<Effects::DrawSpectrum<kMatrixWidth, kMatrixHeight, NR_OF_BANDS>>() });
+auto effects = std::vector<Effect::SPtr>({ std::make_shared<Effects::FillColor<kMatrixWidth, kMatrixHeight, Effect::Type::ToDestination>>(), std::make_shared<Effects::DrawSpectrum<kMatrixWidth, kMatrixHeight, NR_OF_BANDS>>() });
+//auto effects = std::vector<Effect::SPtr>({ std::make_shared<Effects::MoveFromCenter<kMatrixWidth, kMatrixHeight>>(), std::make_shared<Effects::ChangeBrightness<kMatrixWidth, kMatrixHeight>>(), std::make_shared<Effects::DrawSpectrum<kMatrixWidth, kMatrixHeight, NR_OF_BANDS>>() });
 auto pipeline = EffectPipeline<kMatrixWidth, kMatrixHeight>(effects);
 
 // TODO: Functions to randomize effect pipeline and configure effects
@@ -221,8 +223,8 @@ void setup() {
 
   // initialize LED matrix
   matrix.addLayer(&backgroundLayer);
-  matrix.setBrightness(255);
-  matrix.setRefreshRate(60);
+  matrix.setBrightness(128);
+  matrix.setRefreshRate(50);
   matrix.begin();
   // initialize microphone
   mic.begin();
@@ -251,7 +253,7 @@ void loop() {
     auto magnitudes = normalization.apply(amplitudes);
     auto [levels, peaks] = spectrum.update(magnitudes);
     auto probabilities = beats.update(levels);
-    bool isBeat = beats.timeSinceLastBeatMs() < 100;
+    bool isBeat = beats.timeSinceLastBeatMs() < 50;
     //  Serial.println(beats.timeSinceLastBeatMs());
     pipeline.render(levels, peaks, isBeat);
     screen.blit(pipeline.output());

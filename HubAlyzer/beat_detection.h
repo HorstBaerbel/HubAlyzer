@@ -5,17 +5,11 @@
 #include <cmath>
 #include <functional>
 
-template <typename T>
-T clamp(T value, T minimum, T maximum)
-{
-    return std::min(std::max(value, minimum), maximum);
-}
-
 // Simple beat detector
 // SAMPLE_COUNT = Number of samples / amplitudes in buffer
 // MAX_HZ = Maximum / end of frequency spectrum for beat detection
 // SAMPLE_RATE = Audio sample rate in Hz
-template <unsigned SAMPLE_COUNT, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000>
+template <unsigned SAMPLE_COUNT, unsigned int MAX_HZ = 4000, unsigned SAMPLE_RATE_HZ = 48000, unsigned UPDATE_RATE_HZ = 60>
 class BeatDetection
 {
     static constexpr float MIN_HZ = 1.0f / SAMPLE_COUNT * SAMPLE_RATE_HZ;      // Minimum frequency ~94Hz for 512 samples, 48kHz sample rate
@@ -24,7 +18,7 @@ class BeatDetection
     static constexpr float NR_OF_BINS = (MAX_HZ - MIN_HZ) / BIN_SIZE_HZ;       // # of bins needed to get to MAX_HZ, ~83 bins to 4KHz, at 48kHz and 512 samples
 
     static constexpr float BEAT_PROBABILITY_THRESHOLD = 0.2f;
-    static constexpr float MIN_BEAT_INTERVAL_MS = 1000.0F / (180.0F / 60.0F);
+    static constexpr float MIN_BEAT_INTERVAL_MS = 1000.0F / (180.0F / UPDATE_RATE_HZ);
 
     static constexpr unsigned int NR_OF_IIR_COEFFICIENTS = 4;
 
