@@ -6,12 +6,6 @@
 
 #include <cmath>
 
-template <typename T>
-auto inline clamp(T value, T minimum, T maximum) -> T
-{
-    return value < minimum ? minimum : (value > maximum ? maximum : value);
-}
-
 namespace Effects
 {
 
@@ -59,24 +53,27 @@ namespace Effects
         {
             for (int32_t x = 0; x < WIDTH; x++)
             {
-                float v = 0;
-                for (int32_t y = 0; y < HEIGHT / 2; y++)
+                auto dst = dest + x;
+                float v = HEIGHT / 2 - 1;
+                for (int32_t y = HEIGHT / 2 - 1; y > 0; y--)
                 {
                   float ty = std::fmod(v, SRC_HEIGHT - 1);
-                  *dest++ = src[static_cast<int>(ty * SRC_WIDTH + x)];
-                  v += m_dist;
+                  *dst = src[static_cast<int>(ty * SRC_WIDTH)];
+                  dst += SRC_WIDTH;
+                  v -= m_dist;
                 }
                 v = HEIGHT / 2;
                 for (int32_t y = HEIGHT / 2; y < HEIGHT; y++)
                 {
                   float ty = std::fmod(v, SRC_HEIGHT - 1);
-                  *dest++ = src[static_cast<int>(ty * SRC_WIDTH + x)];
+                  *dst = src[static_cast<int>(ty * SRC_WIDTH)];
+                  dst += SRC_WIDTH;
                   v += m_dist;
                 }
             }
         }
 
-        float m_dist = 0.75F;
+        float m_dist = 0.5F;
     };
 
     // Rotate + zoom + blit buffer

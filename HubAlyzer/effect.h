@@ -5,6 +5,12 @@
 
 #include <memory>
 
+template <typename T>
+auto inline clamp(T value, T minimum, T maximum) -> T
+{
+    return value < minimum ? minimum : (value > maximum ? maximum : value);
+}
+
 // Interface for all effects rendering to or manipulating frame buffers
 class Effect
 {

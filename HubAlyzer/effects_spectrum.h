@@ -112,10 +112,10 @@ namespace Effects
         displayBand(dest, i, levels[i], peaks[i], Height / 2, 0.5f, true);
         displayBand(dest, i, levels[i], peaks[i], Height / 2, 0.5f, false);
       }
-      if (isBeat)
+      /*if (isBeat)
       {
         dest[0] = RGBf{1.0F, 1.0F, 1.0F};
-      }
+      }*/
     }
 
     void spectrumRays(RGBf *dest, const float *levels, const float *peaks, float angle)
