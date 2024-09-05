@@ -112,3 +112,12 @@ HSVf HSVf::fromRGB(const RGBf &rgb)
     hsv.v = cMax;
     return hsv;
 }
+
+RGBf lerp(const RGBf & a, const RGBf & b, float t)
+{
+    RGBf result;
+    result.r = a.r + t * (b.r - a.r);
+    result.g = a.g + t * (b.g - a.g);
+    result.b = a.b + t * (b.b - a.b);
+    return result;
+}
