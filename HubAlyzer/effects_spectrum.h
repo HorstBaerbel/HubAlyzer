@@ -133,14 +133,14 @@ namespace Effects
           auto color = RGBf(HSVf((float)i / (NrOfBands - 1), 1.0F, 1.0F));
           auto p1 = polarToCartesian(levelRadius, angle0);
           auto p2 = polarToCartesian(levelRadius, angle1);
-          //m_layer.fillTriangle(center.x, center.y, center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
+          //fillTriangle(center.x, center.y, center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
         }
         if (peakRadius > 0.5f)
         {
           auto color = RGBf(HSVf((float)i / (NrOfBands - 1), 0.4F, 0.2F));
           auto p1 = polarToCartesian(peakRadius, angle0);
           auto p2 = polarToCartesian(peakRadius, angle1);
-          //m_layer.drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
+          //drawLine(center.x + p1.x, center.y + p1.y, center.x + p2.x, center.y + p2.y, color);
         }
       }
     }

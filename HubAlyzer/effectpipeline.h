@@ -19,7 +19,19 @@ public:
         // loop through all effects
         for (auto &effect : m_effects)
         {
-            effect->render(m_outBuffer, m_inBuffer, levels, peaks, isBeat);
+          switch(effect->type()) {
+              case Effect::Type::ToDestination:
+                  effect->render(m_outBuffer, nullptr, levels, peaks, isBeat);
+                  break;
+              case Effect::Type::ToSource:
+                  effect->render(m_inBuffer, nullptr, levels, peaks, isBeat);
+                  break;
+              case Effect::Type::DestinationToSource:
+                  effect->render(m_inBuffer, m_outBuffer, levels, peaks, isBeat);
+                  break;
+            default:
+                  effect->render(m_outBuffer, m_inBuffer, levels, peaks, isBeat);
+          }
         }
     }
 

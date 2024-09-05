@@ -8,7 +8,7 @@
 namespace Effects
 {
 
-  template <int WIDTH, int HEIGHT>
+  template <int WIDTH, int HEIGHT, Effect::Type TYPE = Effect::Type::ToDestination>
   class FillColor : public Effect
   {
   public:
@@ -16,8 +16,12 @@ namespace Effects
       : m_color(color)
     {}
 
+    virtual auto type() const -> Type override
+    {
+      return TYPE;
+    }
 
-    virtual auto render(RGBf *dest, [[maybe_unused]] const RGBf *src, [[maybe_unused]] const float *levels, [[maybe_unused]] const float *peaks, [[maybe_unused]] bool isBeat) -> void override
+    virtual auto render(RGBf *dest, const RGBf *src, [[maybe_unused]] const float *levels, [[maybe_unused]] const float *peaks, [[maybe_unused]] bool isBeat) -> void override
     {
       fill(dest, m_color);
     }
@@ -27,7 +31,7 @@ namespace Effects
     {
       for (unsigned i = 0; i < WIDTH * HEIGHT; i++)
       {
-        dest[i] = color;
+          dest[i] = color;
       }
     }
 

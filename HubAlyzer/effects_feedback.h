@@ -15,11 +15,80 @@ auto inline clamp(T value, T minimum, T maximum) -> T
 namespace Effects
 {
 
+    // Move screen from center an amount to the left or right
+    template <unsigned WIDTH, unsigned HEIGHT>
+    class MoveFromCenter : public Effect
+    {
+    public:
+        virtual auto type() const -> Type override
+        {
+          return Effect::Type::SourceToDestination;
+        }
+
+        virtual auto render(RGBf *dest, const RGBf *src, [[maybe_unused]] const float *levels, [[maybe_unused]] const float *peaks, [[maybe_unused]] bool isBeat) -> void override
+        {
+            moveFromCenterVertical<WIDTH, HEIGHT>(dest, src, m_dist);
+        }
+
+    private:
+        template <unsigned SRC_WIDTH, unsigned SRC_HEIGHT>
+        auto moveFromCenterHorizontal(RGBf *dest, const RGBf *src, float dist) -> void
+        {
+            for (int32_t y = 0; y < HEIGHT; y++)
+            {
+                const auto ty = y * SRC_WIDTH;
+                float u = 0;
+                for (int32_t x = 0; x < WIDTH / 2; x++)
+                {
+                  float tx = std::fmod(u, SRC_WIDTH - 1);
+                  *dest++ = src[static_cast<int>(ty + tx)];
+                  u += m_dist;
+                }
+                u = WIDTH / 2;
+                for (int32_t x = WIDTH / 2; x < WIDTH; x++)
+                {
+                  float tx = std::fmod(u, SRC_WIDTH - 1);
+                  *dest++ = src[static_cast<int>(ty + tx)];
+                  u += m_dist;
+                }
+            }
+        }
+
+        template <unsigned SRC_WIDTH, unsigned SRC_HEIGHT>
+        auto moveFromCenterVertical(RGBf *dest, const RGBf *src, float dist) -> void
+        {
+            for (int32_t x = 0; x < WIDTH; x++)
+            {
+                float v = 0;
+                for (int32_t y = 0; y < HEIGHT / 2; y++)
+                {
+                  float ty = std::fmod(v, SRC_HEIGHT - 1);
+                  *dest++ = src[static_cast<int>(ty * SRC_WIDTH + x)];
+                  v += m_dist;
+                }
+                v = HEIGHT / 2;
+                for (int32_t y = HEIGHT / 2; y < HEIGHT; y++)
+                {
+                  float ty = std::fmod(v, SRC_HEIGHT - 1);
+                  *dest++ = src[static_cast<int>(ty * SRC_WIDTH + x)];
+                  v += m_dist;
+                }
+            }
+        }
+
+        float m_dist = 0.75F;
+    };
+
     // Rotate + zoom + blit buffer
     template <unsigned WIDTH, unsigned HEIGHT>
     class RotoBlit : public Effect
     {
     public:
+        virtual auto type() const -> Type override
+        {
+          return Effect::Type::SourceToDestination;
+        }
+
         virtual auto render(RGBf *dest, const RGBf *src, [[maybe_unused]] const float *levels, [[maybe_unused]] const float *peaks, [[maybe_unused]] bool isBeat) -> void override
         {
             rotoBlit<WIDTH, HEIGHT, true>(dest, src, m_position, m_angle, m_scale);
@@ -53,18 +122,19 @@ namespace Effects
                 for (int32_t x = 0; x < WIDTH; x++)
                 {
                     float tx = std::fmod(u, SRC_WIDTH - 1);
-                    float ty = std::fmod(v, SRC_HEGIHT - 1);
+                    float ty = std::fmod(v, SRC_HEIGHT - 1);
                     if constexpr (ADDITIVE)
                     {
-                        auto pixel = *dst + src[static_cast<int>(ty * SRC_WIDTH + tx)];
-                        pixel.r = clamp(pixel.r, 0.0F, 1.0f);
-                        pixel.g = clamp(pixel.g, 0.0F, 1.0f);
-                        pixel.b = clamp(pixel.b, 0.0F, 1.0f);
-                        *dst++ = pixel;
+                        auto out = *dest;
+                        const auto & in = src[static_cast<int>(ty * SRC_WIDTH + tx)];
+                        out.r = clamp(in.r + out.r, 0.0F, 1.0f);
+                        out.g = clamp(in.g + out.g, 0.0F, 1.0f);
+                        out.b = clamp(in.b + out.b, 0.0F, 1.0f);
+                        *dest++ = out;
                     }
                     else
                     {
-                        *dst++ = src[static_cast<int>(ty * SRC_WIDTH + tx)];
+                        *dest++ = src[static_cast<int>(ty * SRC_WIDTH + tx)];
                     }
                     u += pa;
                     v += pc;
@@ -90,12 +160,12 @@ namespace Effects
         }
 
     private:
-        auto changeBrightness(RGBf *dest, const RGBf *src, float t) -> void
+        auto changeBrightness(RGBf *dest, [[maybe_unused]] const RGBf *src, float t) -> void
         {
             for (unsigned i = 0; i < WIDTH * HEIGHT; i++)
             {
                 // note that these input colors are not linear RGB. we should probably gamma-correct them
-                auto color = src[i];
+                auto color = dest[i];
                 auto r = color.r + t * color.r;
                 auto g = color.g + t * color.g;
                 auto b = color.b + t * color.b;
@@ -120,12 +190,12 @@ namespace Effects
         }
 
     private:
-        auto changeSaturation(RGBf *dest, const RGBf *src, float t) -> void
+        auto changeSaturation(RGBf *dest, [[maybe_unused]] const RGBf *src, float t) -> void
         {
             for (unsigned i = 0; i < WIDTH * HEIGHT; i++)
             {
                 // note that these input colors are not linear RGB. we should probably gamma-correct them
-                auto color = src[i];
+                auto color = dest[i];
                 auto y = 0.2126F * color.r + 0.7152F * color.g + 0.0722F * color.b;
                 auto r = color.r + t * (color.r - y);
                 auto g = color.g + t * (color.g - y);

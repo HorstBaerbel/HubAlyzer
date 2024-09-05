@@ -9,8 +9,23 @@
 class Effect
 {
 public:
+    enum class Type
+    {
+      ToDestination,
+      ToSource,
+      DestinationToSource,
+      SourceToDestination
+    };
+
     // Shared effect object
     using SPtr = std::shared_ptr<Effect>;
+
+    // Reimplement this in derived effect classes
+    // Per default effects are applied to destination only
+    virtual auto type() const -> Type
+    {
+      return Type::ToDestination;
+    }
 
     // Reimplement this in derived effect classes
     virtual auto render(RGBf *dest, const RGBf *src, const float *levels, const float *peaks, bool isBeat) -> void = 0;
